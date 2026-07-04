@@ -1,0 +1,9 @@
+MynaFileProxy
+build/bin/
+build/darwin/appicon.iconset/
+/dist/
+frontend/node_modules/
+frontend/package.json.md5
+frontend/dist/*
+!frontend/dist/.gitkeep
+bin/*/file-proxy*
