@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -38,6 +42,72 @@ func TestSplitCertificateBundleRejectsSingleBlock(t *testing.T) {
 func TestBundledBinaryName(t *testing.T) {
 	if bundledBinaryName() == "" {
 		t.Fatal("expected binary name")
+	}
+}
+
+func TestWriteBundledFileOverwritesSameSizeDifferentContent(t *testing.T) {
+	embeddedPath := filepath.ToSlash(filepath.Join("bin", "darwin-arm64", "file-proxy"))
+	data, err := bundledBinaries.ReadFile(embeddedPath)
+	if err != nil {
+		t.Skipf("bundled test binary unavailable: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("bundled test binary is empty")
+	}
+
+	outPath := filepath.Join(t.TempDir(), "file-proxy")
+	stale := append([]byte(nil), data...)
+	stale[0] ^= 0xff
+	if err := os.WriteFile(outPath, stale, 0o755); err != nil {
+		t.Fatalf("write stale file: %v", err)
+	}
+
+	if err := writeBundledFile(embeddedPath, outPath, 0o755); err != nil {
+		t.Fatalf("writeBundledFile returned error: %v", err)
+	}
+	written, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read written file: %v", err)
+	}
+	if !reflect.DeepEqual(written, data) {
+		t.Fatal("expected stale same-size file to be overwritten")
+	}
+}
+
+func TestStartupExtractsBundledFileProxy(t *testing.T) {
+	configRoot := t.TempDir()
+	if runtime.GOOS == "windows" {
+		t.Setenv("AppData", configRoot)
+		t.Setenv("LocalAppData", configRoot)
+	} else {
+		t.Setenv("HOME", configRoot)
+		t.Setenv("XDG_CONFIG_HOME", configRoot)
+		t.Setenv("XDG_CACHE_HOME", filepath.Join(configRoot, "cache"))
+	}
+
+	embeddedPath := filepath.ToSlash(filepath.Join("bin", binaryTarget(), bundledBinaryName()))
+	expected, err := bundledBinaries.ReadFile(embeddedPath)
+	if err != nil {
+		t.Skipf("bundled test binary unavailable for %s: %v", binaryTarget(), err)
+	}
+
+	app := NewApp()
+	app.startup(context.Background())
+	status := app.Status()
+	if status.LastError != "" {
+		t.Fatalf("startup returned error: %s", status.LastError)
+	}
+
+	dir, err := appRuntimeDir()
+	if err != nil {
+		t.Fatalf("appRuntimeDir returned error: %v", err)
+	}
+	actual, err := os.ReadFile(filepath.Join(dir, "bin", binaryTarget(), bundledBinaryName()))
+	if err != nil {
+		t.Fatalf("read extracted binary: %v", err)
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatal("expected startup to extract bundled file-proxy")
 	}
 }
 

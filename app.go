@@ -94,6 +94,12 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	if _, err := extractBundledFileProxy(); err != nil {
+		a.mu.Lock()
+		a.lastError = err.Error()
+		a.appendLogLocked("prepare bundled file-proxy failed: " + err.Error())
+		a.mu.Unlock()
+	}
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -477,6 +483,18 @@ func appConfigDir() (string, error) {
 	return dir, nil
 }
 
+func appRuntimeDir() (string, error) {
+	root, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(root, "MynaFileProxy")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
 func binaryTarget() string {
 	return runtime.GOOS + "-" + runtime.GOARCH
 }
@@ -488,39 +506,87 @@ func bundledBinaryName() string {
 	return "file-proxy"
 }
 
+func removeQuarantineAttribute(path string) {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	_ = exec.Command("xattr", "-d", "com.apple.quarantine", path).Run()
+}
+
+func writeBundledFile(embeddedPath string, outPath string, mode os.FileMode) error {
+	data, err := bundledBinaries.ReadFile(embeddedPath)
+	if err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return fmt.Errorf("bundled file is empty: %s", embeddedPath)
+	}
+
+	existing, readErr := os.ReadFile(outPath)
+	if readErr == nil && bytes.Equal(existing, data) {
+		if mode&0o111 != 0 {
+			_ = os.Chmod(outPath, 0o755)
+		}
+		removeQuarantineAttribute(outPath)
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(outPath, data, mode); err != nil {
+		return err
+	}
+	if mode&0o111 != 0 {
+		_ = os.Chmod(outPath, 0o755)
+	}
+	removeQuarantineAttribute(outPath)
+	return nil
+}
+
+func extractBundledSupportFiles(target string, executablePath string) error {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+
+	embeddedDir := filepath.ToSlash(filepath.Join("bin", target, "lib", "file-proxy"))
+	entries, err := bundledBinaries.ReadDir(embeddedDir)
+	if err != nil {
+		return nil
+	}
+
+	outDir := filepath.Clean(filepath.Join(filepath.Dir(executablePath), "..", "lib", "file-proxy"))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		embeddedPath := filepath.ToSlash(filepath.Join(embeddedDir, entry.Name()))
+		outPath := filepath.Join(outDir, entry.Name())
+		if err := writeBundledFile(embeddedPath, outPath, 0o644); err != nil {
+			return fmt.Errorf("extract bundled support file %s: %w", embeddedPath, err)
+		}
+	}
+	return nil
+}
+
 func extractBundledFileProxy() (string, error) {
 	target := binaryTarget()
 	name := bundledBinaryName()
 	embeddedPath := filepath.ToSlash(filepath.Join("bin", target, name))
-	data, err := bundledBinaries.ReadFile(embeddedPath)
-	if err != nil {
-		return "", fmt.Errorf("bundled file-proxy binary missing for %s: %w", target, err)
-	}
-	if len(bytes.TrimSpace(data)) == 0 {
-		return "", fmt.Errorf("bundled file-proxy binary is empty for %s", target)
-	}
 
-	dir, err := appConfigDir()
+	dir, err := appRuntimeDir()
 	if err != nil {
 		return "", err
 	}
 	outPath := filepath.Join(dir, "bin", target, name)
-	info, statErr := os.Stat(outPath)
-	if statErr == nil && info.Size() == int64(len(data)) {
-		return outPath, nil
-	}
-	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-		return "", err
-	}
 	mode := os.FileMode(0o755)
 	if runtime.GOOS == "windows" {
 		mode = 0o644
 	}
-	if err := os.WriteFile(outPath, data, mode); err != nil {
-		return "", err
+	if err := writeBundledFile(embeddedPath, outPath, mode); err != nil {
+		return "", fmt.Errorf("bundled file-proxy binary missing for %s: %w", target, err)
 	}
-	if runtime.GOOS != "windows" {
-		_ = os.Chmod(outPath, 0o755)
+	if err := extractBundledSupportFiles(target, outPath); err != nil {
+		return "", err
 	}
 	return outPath, nil
 }
