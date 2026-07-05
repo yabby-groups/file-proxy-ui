@@ -22,20 +22,27 @@ import (
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const apiBaseURL = "https://iot.huabot.com"
+const (
+	defaultAPIBaseURL = "https://iot.huabot.com"
+	defaultThread     = 4
+	maxThread         = 16
+)
 
 type App struct {
 	ctx context.Context
 
-	mu          sync.Mutex
-	token       string
-	userName    string
-	config      *PeriodicConfig
-	certificate *CertificatePaths
-	rootDir     string
-	cmd         *exec.Cmd
-	logs        []string
-	lastError   string
+	mu           sync.Mutex
+	apiBaseURL   string
+	token        string
+	userName     string
+	userInfo     UserInfo
+	config       *PeriodicConfig
+	certificate  *CertificatePaths
+	rootDir      string
+	startOptions StartOptions
+	cmd          *exec.Cmd
+	logs         []string
+	lastError    string
 }
 
 type APIErrorResponse struct {
@@ -70,13 +77,21 @@ type CertificatePaths struct {
 	ClientPrivatePath string `json:"client_private_path"`
 }
 
+type UserInfo struct {
+	Name      string `json:"name"`
+	NickName  string `json:"nick_name"`
+	AvatarURL string `json:"avatar_url"`
+}
+
 type AppStatus struct {
 	APIBaseURL   string            `json:"api_base_url"`
 	LoggedIn     bool              `json:"logged_in"`
 	UserName     string            `json:"user_name"`
+	UserInfo     UserInfo          `json:"user_info"`
 	Config       *PeriodicConfig   `json:"config"`
 	Certificate  *CertificatePaths `json:"certificate"`
 	RootDir      string            `json:"root_dir"`
+	StartOptions StartOptions      `json:"start_options"`
 	Running      bool              `json:"running"`
 	LastError    string            `json:"last_error"`
 	Logs         []string          `json:"logs"`
@@ -88,17 +103,38 @@ type StartOptions struct {
 	AllowDelete bool `json:"allow_delete"`
 }
 
+type StoredSettings struct {
+	APIBaseURL   string       `json:"api_base_url"`
+	RootDir      string       `json:"root_dir"`
+	StartOptions StartOptions `json:"start_options"`
+	Token        string       `json:"token"`
+	UserName     string       `json:"user_name"`
+	UserInfo     UserInfo     `json:"user_info"`
+}
+
 func NewApp() *App {
-	return &App{}
+	return &App{
+		apiBaseURL:   defaultAPIBaseURL,
+		startOptions: defaultStartOptions(),
+	}
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	if err := a.loadSettings(); err != nil {
+		a.mu.Lock()
+		a.lastError = err.Error()
+		a.appendLogLocked("load saved settings failed: " + err.Error())
+		a.mu.Unlock()
+	}
 	if _, err := extractBundledFileProxy(); err != nil {
 		a.mu.Lock()
 		a.lastError = err.Error()
 		a.appendLogLocked("prepare bundled file-proxy failed: " + err.Error())
 		a.mu.Unlock()
+	}
+	if a.currentToken() != "" {
+		go a.prepareSavedLogin()
 	}
 }
 
@@ -129,12 +165,74 @@ func (a *App) Login(name string, passwd string) (AppStatus, error) {
 	a.mu.Lock()
 	a.token = out.Token
 	a.userName = name
+	a.userInfo = extractUserInfo(name, out.User)
 	a.config = nil
 	a.certificate = nil
 	a.lastError = ""
 	a.appendLogLocked("logged in as " + name)
+	saveErr := a.saveSettingsLocked()
 	a.mu.Unlock()
+	if saveErr != nil {
+		return a.Status(), saveErr
+	}
 
+	return a.ensurePeriodicAssets()
+}
+
+func (a *App) Logout() (AppStatus, error) {
+	if _, err := a.StopFileProxy(); err != nil {
+		return a.Status(), err
+	}
+
+	a.mu.Lock()
+	a.token = ""
+	a.userName = ""
+	a.userInfo = UserInfo{}
+	a.config = nil
+	a.certificate = nil
+	a.lastError = ""
+	a.appendLogLocked("logged out")
+	saveErr := a.saveSettingsLocked()
+	a.mu.Unlock()
+	if saveErr != nil {
+		return a.Status(), saveErr
+	}
+	return a.Status(), nil
+}
+
+func (a *App) SetAPIBaseURL(value string) (AppStatus, error) {
+	next, err := normalizeAPIBaseURL(value)
+	if err != nil {
+		return a.Status(), err
+	}
+
+	a.mu.Lock()
+	changed := a.apiBaseURL != next
+	a.mu.Unlock()
+	if changed {
+		if _, err := a.StopFileProxy(); err != nil {
+			return a.Status(), err
+		}
+	}
+
+	a.mu.Lock()
+	a.apiBaseURL = next
+	if changed {
+		a.token = ""
+		a.userName = ""
+		a.userInfo = UserInfo{}
+		a.config = nil
+		a.certificate = nil
+		a.appendLogLocked("api domain changed: " + next)
+	} else {
+		a.appendLogLocked("api domain saved: " + next)
+	}
+	a.lastError = ""
+	saveErr := a.saveSettingsLocked()
+	a.mu.Unlock()
+	if saveErr != nil {
+		return a.Status(), saveErr
+	}
 	return a.Status(), nil
 }
 
@@ -164,6 +262,22 @@ func (a *App) EnsurePeriodicConfig() (AppStatus, error) {
 	a.mu.Unlock()
 
 	return a.Status(), nil
+}
+
+func (a *App) ensurePeriodicAssets() (AppStatus, error) {
+	if _, err := a.EnsurePeriodicConfig(); err != nil {
+		return a.Status(), err
+	}
+	return a.PrepareCertificate()
+}
+
+func (a *App) prepareSavedLogin() {
+	if _, err := a.ensurePeriodicAssets(); err != nil {
+		a.mu.Lock()
+		a.lastError = err.Error()
+		a.appendLogLocked("restore saved login failed: " + err.Error())
+		a.mu.Unlock()
+	}
 }
 
 func (a *App) PrepareCertificate() (AppStatus, error) {
@@ -231,11 +345,16 @@ func (a *App) SelectRootDirectory() (AppStatus, error) {
 	a.rootDir = dir
 	a.lastError = ""
 	a.appendLogLocked("root directory selected: " + dir)
+	saveErr := a.saveSettingsLocked()
 	a.mu.Unlock()
+	if saveErr != nil {
+		return a.Status(), saveErr
+	}
 	return a.Status(), nil
 }
 
 func (a *App) StartFileProxy(options StartOptions) (AppStatus, error) {
+	options = normalizeStartOptions(options)
 	a.mu.Lock()
 	if a.cmd != nil && a.cmd.Process != nil {
 		a.mu.Unlock()
@@ -244,21 +363,41 @@ func (a *App) StartFileProxy(options StartOptions) (AppStatus, error) {
 	config := a.config
 	cert := a.certificate
 	root := a.rootDir
+	token := a.token
+	a.startOptions = options
+	saveErr := a.saveSettingsLocked()
 	a.mu.Unlock()
+	if saveErr != nil {
+		return a.Status(), saveErr
+	}
 
 	if strings.TrimSpace(root) == "" {
 		return a.Status(), errors.New("root directory is required")
+	}
+	if message, err := ensureWorkerFileLimit(); err != nil {
+		a.mu.Lock()
+		a.appendLogLocked("raise file descriptor limit failed: " + err.Error())
+		a.mu.Unlock()
+	} else if message != "" {
+		a.mu.Lock()
+		a.appendLogLocked(message)
+		a.mu.Unlock()
+	}
+	if token != "" && (config == nil || cert == nil) {
+		if _, err := a.ensurePeriodicAssets(); err != nil {
+			return a.Status(), err
+		}
+		a.mu.Lock()
+		config = a.config
+		cert = a.certificate
+		a.mu.Unlock()
 	}
 
 	binaryPath, err := extractBundledFileProxy()
 	if err != nil {
 		return a.Status(), err
 	}
-	thread := options.Thread
-	if thread <= 0 {
-		thread = 10
-	}
-	args := buildFileProxyArgs(root, thread, options.AllowDelete, config, cert)
+	args := buildFileProxyArgs(root, options.Thread, options.AllowDelete, config, cert)
 
 	cmd := exec.Command(binaryPath, args...)
 	stdout, err := cmd.StdoutPipe()
@@ -338,12 +477,14 @@ func (a *App) Status() AppStatus {
 func (a *App) statusLocked() AppStatus {
 	logs := append([]string(nil), a.logs...)
 	return AppStatus{
-		APIBaseURL:   apiBaseURL,
+		APIBaseURL:   a.apiBaseURL,
 		LoggedIn:     a.token != "",
 		UserName:     a.userName,
+		UserInfo:     a.userInfo,
 		Config:       a.config,
 		Certificate:  a.certificate,
 		RootDir:      a.rootDir,
+		StartOptions: a.startOptions,
 		Running:      a.cmd != nil && a.cmd.Process != nil,
 		LastError:    a.lastError,
 		Logs:         logs,
@@ -363,8 +504,17 @@ func (a *App) currentConfig() *PeriodicConfig {
 	return a.config
 }
 
+func (a *App) currentAPIBaseURL() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.apiBaseURL == "" {
+		return defaultAPIBaseURL
+	}
+	return a.apiBaseURL
+}
+
 func (a *App) doForm(method string, path string, form url.Values, token string, out any) error {
-	req, err := http.NewRequest(method, apiBaseURL+path, strings.NewReader(form.Encode()))
+	req, err := http.NewRequest(method, a.currentAPIBaseURL()+path, strings.NewReader(form.Encode()))
 	if err != nil {
 		return err
 	}
@@ -377,7 +527,7 @@ func (a *App) doForm(method string, path string, form url.Values, token string, 
 }
 
 func (a *App) doJSON(method string, path string, token string, body io.Reader, out any) error {
-	req, err := http.NewRequest(method, apiBaseURL+path, body)
+	req, err := http.NewRequest(method, a.currentAPIBaseURL()+path, body)
 	if err != nil {
 		return err
 	}
@@ -389,7 +539,7 @@ func (a *App) doJSON(method string, path string, token string, body io.Reader, o
 }
 
 func (a *App) doRaw(method string, path string, token string) ([]byte, error) {
-	req, err := http.NewRequest(method, apiBaseURL+path, nil)
+	req, err := http.NewRequest(method, a.currentAPIBaseURL()+path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -454,6 +604,29 @@ func decodeAPIError(data []byte, fallback string) error {
 	return errors.New(fallback)
 }
 
+func extractUserInfo(loginName string, user map[string]any) UserInfo {
+	profile, _ := user["profile"].(map[string]any)
+	info := UserInfo{
+		Name:      firstString(user["name"], loginName),
+		NickName:  firstString(user["nick_name"], profile["nick_name"]),
+		AvatarURL: firstString(user["avatar_url"], profile["avatar_url"]),
+	}
+	if info.NickName == "" {
+		info.NickName = firstString(profile["full_name"])
+	}
+	return info
+}
+
+func firstString(values ...any) string {
+	for _, value := range values {
+		text := strings.TrimSpace(fmt.Sprint(value))
+		if text != "" && text != "<nil>" {
+			return text
+		}
+	}
+	return ""
+}
+
 func splitCertificateBundle(bundle string) (string, string, error) {
 	blocks := make([]string, 0, 2)
 	remaining := []byte(bundle)
@@ -481,6 +654,111 @@ func appConfigDir() (string, error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+func settingsPath() (string, error) {
+	dir, err := appConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "settings.json"), nil
+}
+
+func defaultStartOptions() StartOptions {
+	return StartOptions{Thread: defaultThread}
+}
+
+func normalizeAPIBaseURL(value string) (string, error) {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return "", errors.New("api domain is required")
+	}
+	if !strings.Contains(text, "://") {
+		text = "https://" + text
+	}
+	parsed, err := url.Parse(text)
+	if err != nil {
+		return "", err
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", errors.New("api domain must start with http:// or https://")
+	}
+	if parsed.Host == "" {
+		return "", errors.New("api domain host is required")
+	}
+	parsed.Path = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func normalizeStartOptions(options StartOptions) StartOptions {
+	if options.Thread <= 0 {
+		options.Thread = defaultStartOptions().Thread
+	}
+	if options.Thread > maxThread {
+		options.Thread = maxThread
+	}
+	return options
+}
+
+func (a *App) loadSettings() error {
+	path, err := settingsPath()
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	var settings StoredSettings
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return fmt.Errorf("decode saved settings: %w", err)
+	}
+
+	a.mu.Lock()
+	if settings.APIBaseURL != "" {
+		apiBaseURL, err := normalizeAPIBaseURL(settings.APIBaseURL)
+		if err != nil {
+			a.mu.Unlock()
+			return fmt.Errorf("decode saved api domain: %w", err)
+		}
+		a.apiBaseURL = apiBaseURL
+	}
+	a.rootDir = settings.RootDir
+	a.startOptions = normalizeStartOptions(settings.StartOptions)
+	a.token = strings.TrimSpace(settings.Token)
+	a.userName = settings.UserName
+	a.userInfo = settings.UserInfo
+	if a.userInfo.Name == "" {
+		a.userInfo.Name = a.userName
+	}
+	a.mu.Unlock()
+	return nil
+}
+
+func (a *App) saveSettingsLocked() error {
+	path, err := settingsPath()
+	if err != nil {
+		return err
+	}
+	settings := StoredSettings{
+		APIBaseURL:   a.apiBaseURL,
+		RootDir:      a.rootDir,
+		StartOptions: normalizeStartOptions(a.startOptions),
+		Token:        a.token,
+		UserName:     a.userName,
+		UserInfo:     a.userInfo,
+	}
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
 func appRuntimeDir() (string, error) {

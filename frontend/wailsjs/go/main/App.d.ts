@@ -6,9 +6,13 @@ export function EnsurePeriodicConfig():Promise<main.AppStatus>;
 
 export function Login(arg1:string,arg2:string):Promise<main.AppStatus>;
 
+export function Logout():Promise<main.AppStatus>;
+
 export function PrepareCertificate():Promise<main.AppStatus>;
 
 export function SelectRootDirectory():Promise<main.AppStatus>;
+
+export function SetAPIBaseURL(arg1:string):Promise<main.AppStatus>;
 
 export function StartFileProxy(arg1:main.StartOptions):Promise<main.AppStatus>;
 

@@ -1,5 +1,19 @@
 export namespace main {
 
+	export class StartOptions {
+	    thread: number;
+	    allow_delete: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new StartOptions(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.thread = source["thread"];
+	        this.allow_delete = source["allow_delete"];
+	    }
+	}
 	export class CertificatePaths {
 	    server_public_path: string;
 	    client_private_path: string;
@@ -44,13 +58,31 @@ export namespace main {
 	        this.updated_at = source["updated_at"];
 	    }
 	}
+	export class UserInfo {
+	    name: string;
+	    nick_name: string;
+	    avatar_url: string;
+
+	    static createFrom(source: any = {}) {
+	        return new UserInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.nick_name = source["nick_name"];
+	        this.avatar_url = source["avatar_url"];
+	    }
+	}
 	export class AppStatus {
 	    api_base_url: string;
 	    logged_in: boolean;
 	    user_name: string;
+	    user_info: UserInfo;
 	    config?: PeriodicConfig;
 	    certificate?: CertificatePaths;
 	    root_dir: string;
+	    start_options: StartOptions;
 	    running: boolean;
 	    last_error: string;
 	    logs: string[];
@@ -65,9 +97,11 @@ export namespace main {
 	        this.api_base_url = source["api_base_url"];
 	        this.logged_in = source["logged_in"];
 	        this.user_name = source["user_name"];
+	        this.user_info = this.convertValues(source["user_info"], UserInfo);
 	        this.config = this.convertValues(source["config"], PeriodicConfig);
 	        this.certificate = this.convertValues(source["certificate"], CertificatePaths);
 	        this.root_dir = source["root_dir"];
+	        this.start_options = this.convertValues(source["start_options"], StartOptions);
 	        this.running = source["running"];
 	        this.last_error = source["last_error"];
 	        this.logs = source["logs"];
@@ -94,19 +128,6 @@ export namespace main {
 	}
 
 
-	export class StartOptions {
-	    thread: number;
-	    allow_delete: boolean;
 
-	    static createFrom(source: any = {}) {
-	        return new StartOptions(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.thread = source["thread"];
-	        this.allow_delete = source["allow_delete"];
-	    }
-	}
 
 }
