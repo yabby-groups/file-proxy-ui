@@ -400,6 +400,7 @@ func (a *App) StartFileProxy(options StartOptions) (AppStatus, error) {
 	args := buildFileProxyArgs(root, options.Thread, options.AllowDelete, config, cert)
 
 	cmd := exec.Command(binaryPath, args...)
+	cmd.Dir = filepath.Dir(binaryPath)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return a.Status(), err
@@ -808,6 +809,12 @@ func writeBundledFile(embeddedPath string, outPath string, mode os.FileMode) err
 		removeQuarantineAttribute(outPath)
 		return nil
 	}
+	if readErr == nil {
+		_ = os.Chmod(outPath, 0o600)
+		if err := os.Remove(outPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 		return err
 	}
@@ -821,29 +828,37 @@ func writeBundledFile(embeddedPath string, outPath string, mode os.FileMode) err
 	return nil
 }
 
-func extractBundledSupportFiles(target string, executablePath string) error {
-	if runtime.GOOS != "darwin" {
-		return nil
-	}
-
-	embeddedDir := filepath.ToSlash(filepath.Join("bin", target, "lib", "file-proxy"))
+func extractBundledDirectoryFiles(embeddedDir string, outDir string, mode os.FileMode, skipName string) error {
 	entries, err := bundledBinaries.ReadDir(embeddedDir)
 	if err != nil {
 		return nil
 	}
 
-	outDir := filepath.Clean(filepath.Join(filepath.Dir(executablePath), "..", "lib", "file-proxy"))
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || entry.Name() == skipName {
 			continue
 		}
 		embeddedPath := filepath.ToSlash(filepath.Join(embeddedDir, entry.Name()))
 		outPath := filepath.Join(outDir, entry.Name())
-		if err := writeBundledFile(embeddedPath, outPath, 0o644); err != nil {
+		if err := writeBundledFile(embeddedPath, outPath, mode); err != nil {
 			return fmt.Errorf("extract bundled support file %s: %w", embeddedPath, err)
 		}
 	}
 	return nil
+}
+
+func extractBundledSupportFiles(target string, executablePath string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		embeddedDir := filepath.ToSlash(filepath.Join("bin", target, "lib", "file-proxy"))
+		outDir := filepath.Clean(filepath.Join(filepath.Dir(executablePath), "..", "lib", "file-proxy"))
+		return extractBundledDirectoryFiles(embeddedDir, outDir, 0o644, "")
+	case "windows":
+		embeddedDir := filepath.ToSlash(filepath.Join("bin", target))
+		return extractBundledDirectoryFiles(embeddedDir, filepath.Dir(executablePath), 0o644, bundledBinaryName())
+	default:
+		return nil
+	}
 }
 
 func extractBundledFileProxy() (string, error) {

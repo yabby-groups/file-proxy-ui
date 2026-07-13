@@ -8,4 +8,5 @@ frontend/package.json.md5
 frontend/dist/*
 !frontend/dist/.gitkeep
 bin/*/file-proxy*
+bin/*/*.dll
 bin/*/lib/

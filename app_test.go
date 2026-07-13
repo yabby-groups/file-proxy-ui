@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +74,45 @@ func TestWriteBundledFileOverwritesSameSizeDifferentContent(t *testing.T) {
 	}
 	if !reflect.DeepEqual(written, data) {
 		t.Fatal("expected stale same-size file to be overwritten")
+	}
+}
+
+func TestExtractBundledDirectoryFilesCopiesWindowsSiblings(t *testing.T) {
+	embeddedDir := filepath.ToSlash(filepath.Join("bin", "windows-amd64"))
+	entries, err := bundledBinaries.ReadDir(embeddedDir)
+	if err != nil {
+		t.Skipf("bundled windows test files unavailable: %v", err)
+	}
+
+	hasSupportFile := false
+	for _, entry := range entries {
+		if !entry.IsDir() && entry.Name() != "file-proxy.exe" {
+			hasSupportFile = true
+			break
+		}
+	}
+	if !hasSupportFile {
+		t.Skip("bundled windows support files unavailable")
+	}
+
+	outDir := t.TempDir()
+	if err := extractBundledDirectoryFiles(embeddedDir, outDir, 0o644, "file-proxy.exe"); err != nil {
+		t.Fatalf("extractBundledDirectoryFiles returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "file-proxy.exe")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("expected main file-proxy.exe to be skipped")
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == "file-proxy.exe" {
+			continue
+		}
+		info, err := os.Stat(filepath.Join(outDir, entry.Name()))
+		if err != nil {
+			t.Fatalf("expected support file %s to be copied: %v", entry.Name(), err)
+		}
+		if info.Size() == 0 {
+			t.Fatalf("expected support file %s to be non-empty", entry.Name())
+		}
 	}
 }
 

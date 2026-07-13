@@ -41,6 +41,25 @@ clear_quarantine() {
   xattr -dr com.apple.quarantine "$@" 2>/dev/null || true
 }
 
+install_file() {
+  local src="$1"
+  local dst="$2"
+
+  rm -f "$dst"
+  cp "$src" "$dst"
+}
+
+copy_sibling_files() {
+  local source_dir="$1"
+  local target_dir="$2"
+  local main_name="$3"
+  local source
+
+  while IFS= read -r source; do
+    install_file "$source" "$target_dir/$(basename "$source")"
+  done < <(find "$source_dir" -maxdepth 1 -type f ! -name "$main_name" -print)
+}
+
 target_slug() {
   printf '%s' "$1" | tr '/' '-'
 }
@@ -77,7 +96,10 @@ copy_local_worker_source() {
   mkdir -p "$target_dir"
   if [[ -n "$LOCAL_WORKER_BUNDLE" ]]; then
     [[ -f "$LOCAL_WORKER_BUNDLE/bin/$source_bin" ]] || fail "local worker bundle missing bin/$source_bin: $LOCAL_WORKER_BUNDLE"
-    cp "$LOCAL_WORKER_BUNDLE/bin/$source_bin" "$worker"
+    install_file "$LOCAL_WORKER_BUNDLE/bin/$source_bin" "$worker"
+    if [[ "$target" == windows/* ]]; then
+      copy_sibling_files "$LOCAL_WORKER_BUNDLE/bin" "$target_dir" "$source_bin"
+    fi
     if [[ "$target" == darwin/* && -d "$LOCAL_WORKER_BUNDLE/lib/file-proxy" ]]; then
       rm -rf "$target_dir/lib"
       mkdir -p "$target_dir/lib"
@@ -85,7 +107,7 @@ copy_local_worker_source() {
     fi
   else
     [[ -f "$LOCAL_WORKER_BIN" ]] || fail "local worker binary not found: $LOCAL_WORKER_BIN"
-    cp "$LOCAL_WORKER_BIN" "$worker"
+    install_file "$LOCAL_WORKER_BIN" "$worker"
   fi
   case "$target" in
     windows/*) ;;
@@ -192,11 +214,12 @@ extract_worker_archive() {
   case "$target" in
     windows/*)
       [[ -f "$tmp_dir/file-proxy.exe" ]] || fail "file-proxy.exe not found in $archive"
-      cp "$tmp_dir/file-proxy.exe" "$target_dir/file-proxy.exe"
+      install_file "$tmp_dir/file-proxy.exe" "$target_dir/file-proxy.exe"
+      copy_sibling_files "$tmp_dir" "$target_dir" "file-proxy.exe"
       ;;
     darwin/arm64)
       [[ -f "$tmp_dir/bin/file-proxy" ]] || fail "bin/file-proxy not found in $archive"
-      cp "$tmp_dir/bin/file-proxy" "$target_dir/file-proxy"
+      install_file "$tmp_dir/bin/file-proxy" "$target_dir/file-proxy"
       chmod 0755 "$target_dir/file-proxy"
       if [[ -d "$tmp_dir/lib/file-proxy" ]]; then
         rm -rf "$target_dir/lib"
@@ -207,7 +230,7 @@ extract_worker_archive() {
       ;;
     linux/*)
       [[ -f "$tmp_dir/file-proxy" ]] || fail "file-proxy not found in $archive"
-      cp "$tmp_dir/file-proxy" "$target_dir/file-proxy"
+      install_file "$tmp_dir/file-proxy" "$target_dir/file-proxy"
       chmod 0755 "$target_dir/file-proxy"
       ;;
     *)
