@@ -306,10 +306,10 @@ button:disabled {
 
 .settingsPanel {
   display: grid;
-  flex: 0 0 auto;
-  grid-template-columns: minmax(320px, 1fr) auto;
+  grid-template-columns: minmax(260px, 1fr) minmax(280px, 1fr) auto;
   align-items: end;
-  gap: 12px;
+  gap: 14px;
+  flex: 0 0 auto;
   margin-bottom: 14px;
   border: 1px solid #d7dee9;
   border-radius: 8px;
@@ -317,12 +317,142 @@ button:disabled {
   background: #ffffff;
 }
 
-.settingsPanel label {
+.settingsPanel > label,
+.settingsFields label {
   margin-bottom: 0;
 }
 
 .settingsPanel .buttonRow {
   margin-top: 0;
+}
+
+.settingsAccount {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settingsAccount > div:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.settingsAccount span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.settingsAccount strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsAccount button {
+  margin-left: auto;
+}
+
+.avatar.small {
+  width: 34px;
+  height: 34px;
+  font-size: 14px;
+}
+
+.settingsFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.45fr);
+  gap: 12px;
+}
+
+.settingsService {
+  display: grid;
+  gap: 10px;
+}
+
+.settingsFields .checkLine {
+  align-self: end;
+  margin-bottom: 3px;
+}
+
+.directoryField {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+}
+
+.directoryField button {
+  width: 38px;
+  padding: 0;
+}
+
+.settingsActions {
+  align-self: end;
+}
+
+.loginScreen {
+  display: grid;
+  flex: 1 1 auto;
+  place-items: center;
+  min-height: 0;
+}
+
+.loginCard {
+  width: min(420px, 100%);
+  padding: 20px;
+  border: 1px solid #d7dee9;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.08);
+}
+
+.loginCard .primary {
+  margin-top: 4px;
+}
+
+.overviewGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.serviceOverview {
+  display: flex;
+  flex-direction: column;
+}
+
+.serviceOverview .statusRow {
+  min-height: 34px;
+}
+
+.serviceOverview .buttonRow {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.workerLimit {
+  margin: -2px 0 10px;
+  border-left: 3px solid #98a2b3;
+  padding: 7px 9px;
+  color: #667085;
+  background: #f8fafc;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.workerLimit.active {
+  border-left-color: #d92d20;
+  color: #9f2a1f;
+  background: #fff1ef;
+}
+
+.addressActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .userCard {
@@ -409,6 +539,29 @@ button:disabled {
   color: #172033;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.addressLink {
+  min-width: 0;
+  justify-content: flex-start;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  color: #0d6b59;
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addressLink:hover:not(:disabled) {
+  color: #084c40;
+  background: transparent;
+  text-decoration: underline;
+}
+
+.addressLink:disabled {
+  color: #667085;
 }
 
 .webAddress {

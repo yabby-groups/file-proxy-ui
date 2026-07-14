@@ -244,7 +244,7 @@ func (a *App) SetAPIBaseURL(value string) (AppStatus, error) {
 	return a.Status(), nil
 }
 
-func (a *App) EnsurePeriodicConfig() (AppStatus, error) {
+func (a *App) ensurePeriodicConfig() (AppStatus, error) {
 	token := a.currentToken()
 	if token == "" {
 		return a.Status(), errors.New("login is required")
@@ -273,10 +273,10 @@ func (a *App) EnsurePeriodicConfig() (AppStatus, error) {
 }
 
 func (a *App) ensurePeriodicAssets() (AppStatus, error) {
-	if _, err := a.EnsurePeriodicConfig(); err != nil {
+	if _, err := a.ensurePeriodicConfig(); err != nil {
 		return a.Status(), err
 	}
-	return a.PrepareCertificate()
+	return a.prepareCertificate()
 }
 
 func (a *App) prepareSavedLogin() {
@@ -288,7 +288,7 @@ func (a *App) prepareSavedLogin() {
 	}
 }
 
-func (a *App) PrepareCertificate() (AppStatus, error) {
+func (a *App) prepareCertificate() (AppStatus, error) {
 	token := a.currentToken()
 	if token == "" {
 		return a.Status(), errors.New("login is required")
@@ -348,7 +348,6 @@ func (a *App) SelectRootDirectory() (AppStatus, error) {
 	if dir == "" {
 		return a.Status(), nil
 	}
-
 	a.mu.Lock()
 	a.rootDir = dir
 	a.lastError = ""
