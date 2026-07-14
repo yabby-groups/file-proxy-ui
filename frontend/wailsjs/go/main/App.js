@@ -14,6 +14,10 @@ export function Logout() {
   return window['go']['main']['App']['Logout']();
 }
 
+export function OpenWebURL() {
+  return window['go']['main']['App']['OpenWebURL']();
+}
+
 export function PrepareCertificate() {
   return window['go']['main']['App']['PrepareCertificate']();
 }
@@ -30,10 +34,18 @@ export function StartFileProxy(arg1) {
   return window['go']['main']['App']['StartFileProxy'](arg1);
 }
 
+export function StartFileProxyWeb(arg1) {
+  return window['go']['main']['App']['StartFileProxyWeb'](arg1);
+}
+
 export function Status() {
   return window['go']['main']['App']['Status']();
 }
 
 export function StopFileProxy() {
   return window['go']['main']['App']['StopFileProxy']();
+}
+
+export function StopFileProxyWeb() {
+  return window['go']['main']['App']['StopFileProxyWeb']();
 }

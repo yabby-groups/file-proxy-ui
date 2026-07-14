@@ -8,6 +8,8 @@ export function Login(arg1:string,arg2:string):Promise<main.AppStatus>;
 
 export function Logout():Promise<main.AppStatus>;
 
+export function OpenWebURL():Promise<main.AppStatus>;
+
 export function PrepareCertificate():Promise<main.AppStatus>;
 
 export function SelectRootDirectory():Promise<main.AppStatus>;
@@ -16,6 +18,10 @@ export function SetAPIBaseURL(arg1:string):Promise<main.AppStatus>;
 
 export function StartFileProxy(arg1:main.StartOptions):Promise<main.AppStatus>;
 
+export function StartFileProxyWeb(arg1:main.StartOptions):Promise<main.AppStatus>;
+
 export function Status():Promise<main.AppStatus>;
 
 export function StopFileProxy():Promise<main.AppStatus>;
+
+export function StopFileProxyWeb():Promise<main.AppStatus>;

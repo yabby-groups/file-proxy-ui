@@ -198,6 +198,45 @@ func TestBuildFileProxyArgsIncludesPeriodicConfigWhenPrepared(t *testing.T) {
 	}
 }
 
+func TestBuildFileProxyWebArgsIncludesPeriodicConfig(t *testing.T) {
+	args := buildFileProxyWebArgs(
+		9123,
+		&PeriodicConfig{
+			PeriodicPort: "tcp://periodic:5000",
+			RSAMode:      "AES",
+			ClientName:   "client",
+			ClientToken:  "token",
+			FuncPrefix:   "prefix_",
+		},
+		&CertificatePaths{
+			ServerPublicPath:  "/certs/server.pem",
+			ClientPrivatePath: "/certs/client.pem",
+		},
+	)
+	expected := []string{
+		"--host", "127.0.0.1",
+		"--port", "9123",
+		"--worker-host", "tcp://periodic:5000",
+		"--rsa-private-path", "/certs/client.pem",
+		"--rsa-public-path", "/certs/server.pem",
+		"--rsa-mode", "AES",
+		"--client-name", "client",
+		"--client-token", "token",
+		"--prefix", "prefix_",
+	}
+	if !reflect.DeepEqual(args, expected) {
+		t.Fatalf("args mismatch:\nwant %#v\ngot  %#v", expected, args)
+	}
+}
+
+func TestBuildFileProxyWebArgsAllowsMissingPeriodicConfig(t *testing.T) {
+	args := buildFileProxyWebArgs(8080, nil, nil)
+	expected := []string{"--host", "127.0.0.1", "--port", "8080"}
+	if !reflect.DeepEqual(args, expected) {
+		t.Fatalf("args mismatch:\nwant %#v\ngot %#v", expected, args)
+	}
+}
+
 func TestNormalizeStartOptionsBoundsThread(t *testing.T) {
 	if got := normalizeStartOptions(StartOptions{}).Thread; got != defaultThread {
 		t.Fatalf("default thread mismatch: %d", got)
@@ -207,6 +246,22 @@ func TestNormalizeStartOptionsBoundsThread(t *testing.T) {
 	}
 	if got := normalizeStartOptions(StartOptions{Thread: 2}).Thread; got != 2 {
 		t.Fatalf("expected explicit thread to be preserved, got %d", got)
+	}
+}
+
+func TestNormalizeStartOptionsDefaultsAndBoundsPort(t *testing.T) {
+	defaults := defaultStartOptions()
+	if defaults.Port != defaultWebPort || !defaults.AutoOpenBrowser {
+		t.Fatalf("unexpected new-app defaults: %#v", defaults)
+	}
+	if got := normalizeStartOptions(StartOptions{}).AutoOpenBrowser; got {
+		t.Fatal("expected explicit false auto-open setting to be preserved")
+	}
+	if got := normalizeStartOptions(StartOptions{Port: maxWebPort + 1}).Port; got != defaultWebPort {
+		t.Fatalf("invalid port should use default, got %d", got)
+	}
+	if got := normalizeStartOptions(StartOptions{Port: 9123}).Port; got != 9123 {
+		t.Fatalf("expected explicit port to be preserved, got %d", got)
 	}
 }
 
@@ -232,7 +287,7 @@ func TestSettingsPersistRootDirectoryAndStartOptions(t *testing.T) {
 	}
 	app.apiBaseURL = "https://api.example.test"
 	app.rootDir = "/tmp/file-proxy-root"
-	app.startOptions = StartOptions{Thread: 32, AllowDelete: true}
+	app.startOptions = StartOptions{Thread: 32, AllowDelete: true, Port: 9123, AutoOpenBrowser: false}
 	if err := app.saveSettingsLocked(); err != nil {
 		app.mu.Unlock()
 		t.Fatalf("saveSettingsLocked returned error: %v", err)
@@ -255,6 +310,9 @@ func TestSettingsPersistRootDirectoryAndStartOptions(t *testing.T) {
 	}
 	if !status.StartOptions.AllowDelete {
 		t.Fatal("expected allow delete to be restored")
+	}
+	if status.StartOptions.Port != 9123 || status.StartOptions.AutoOpenBrowser {
+		t.Fatalf("web start options mismatch: %#v", status.StartOptions)
 	}
 	if !status.LoggedIn {
 		t.Fatal("expected login state to be restored")
@@ -350,7 +408,7 @@ func TestLogoutClearsSavedLoginState(t *testing.T) {
 	app.userName = "saved-user"
 	app.userInfo = UserInfo{Name: "saved-user", NickName: "Saved Nick", AvatarURL: "https://example.test/avatar.png"}
 	app.rootDir = "/tmp/file-proxy-root"
-	app.startOptions = StartOptions{Thread: 16, AllowDelete: true}
+	app.startOptions = StartOptions{Thread: 16, AllowDelete: true, Port: 8090, AutoOpenBrowser: false}
 	if err := app.saveSettingsLocked(); err != nil {
 		app.mu.Unlock()
 		t.Fatalf("saveSettingsLocked returned error: %v", err)
@@ -378,7 +436,7 @@ func TestLogoutClearsSavedLoginState(t *testing.T) {
 	if status.RootDir != "/tmp/file-proxy-root" {
 		t.Fatalf("expected root dir to be preserved, got %q", status.RootDir)
 	}
-	if status.StartOptions.Thread != 16 || !status.StartOptions.AllowDelete {
+	if status.StartOptions.Thread != 16 || !status.StartOptions.AllowDelete || status.StartOptions.Port != 8090 || status.StartOptions.AutoOpenBrowser {
 		t.Fatalf("expected start options to be preserved, got %#v", status.StartOptions)
 	}
 }
@@ -411,7 +469,7 @@ func TestLogoutStopsRunningWorker(t *testing.T) {
 	app.token = "saved-token"
 	app.userName = "saved-user"
 	app.mu.Unlock()
-	go app.waitProcess(cmd)
+	go app.waitProcess("file-proxy", cmd)
 
 	if _, err := app.Logout(); err != nil {
 		t.Fatalf("Logout returned error: %v", err)

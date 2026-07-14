@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/browser"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -26,6 +27,8 @@ const (
 	defaultAPIBaseURL = "https://iot.huabot.com"
 	defaultThread     = 4
 	maxThread         = 16
+	defaultWebPort    = 8080
+	maxWebPort        = 65535
 )
 
 type App struct {
@@ -41,6 +44,7 @@ type App struct {
 	rootDir      string
 	startOptions StartOptions
 	cmd          *exec.Cmd
+	webCmd       *exec.Cmd
 	logs         []string
 	lastError    string
 }
@@ -93,14 +97,18 @@ type AppStatus struct {
 	RootDir      string            `json:"root_dir"`
 	StartOptions StartOptions      `json:"start_options"`
 	Running      bool              `json:"running"`
+	WebRunning   bool              `json:"web_running"`
+	WebURL       string            `json:"web_url"`
 	LastError    string            `json:"last_error"`
 	Logs         []string          `json:"logs"`
 	BinaryTarget string            `json:"binary_target"`
 }
 
 type StartOptions struct {
-	Thread      int  `json:"thread"`
-	AllowDelete bool `json:"allow_delete"`
+	Thread          int  `json:"thread"`
+	AllowDelete     bool `json:"allow_delete"`
+	Port            int  `json:"port"`
+	AutoOpenBrowser bool `json:"auto_open_browser"`
 }
 
 type StoredSettings struct {
@@ -127,10 +135,10 @@ func (a *App) startup(ctx context.Context) {
 		a.appendLogLocked("load saved settings failed: " + err.Error())
 		a.mu.Unlock()
 	}
-	if _, err := extractBundledFileProxy(); err != nil {
+	if _, err := extractBundledWorkers(); err != nil {
 		a.mu.Lock()
 		a.lastError = err.Error()
-		a.appendLogLocked("prepare bundled file-proxy failed: " + err.Error())
+		a.appendLogLocked("prepare bundled workers failed: " + err.Error())
 		a.mu.Unlock()
 	}
 	if a.currentToken() != "" {
@@ -139,7 +147,7 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
-	_, _ = a.StopFileProxy()
+	_, _ = a.stopAll()
 }
 
 func (a *App) Login(name string, passwd string) (AppStatus, error) {
@@ -180,7 +188,7 @@ func (a *App) Login(name string, passwd string) (AppStatus, error) {
 }
 
 func (a *App) Logout() (AppStatus, error) {
-	if _, err := a.StopFileProxy(); err != nil {
+	if _, err := a.stopAll(); err != nil {
 		return a.Status(), err
 	}
 
@@ -210,7 +218,7 @@ func (a *App) SetAPIBaseURL(value string) (AppStatus, error) {
 	changed := a.apiBaseURL != next
 	a.mu.Unlock()
 	if changed {
-		if _, err := a.StopFileProxy(); err != nil {
+		if _, err := a.stopAll(); err != nil {
 			return a.Status(), err
 		}
 	}
@@ -421,8 +429,73 @@ func (a *App) StartFileProxy(options StartOptions) (AppStatus, error) {
 
 	go a.captureOutput("stdout", stdout)
 	go a.captureOutput("stderr", stderr)
-	go a.waitProcess(cmd)
+	go a.waitProcess("file-proxy", cmd)
 
+	return a.Status(), nil
+}
+
+func (a *App) StartFileProxyWeb(options StartOptions) (AppStatus, error) {
+	options = normalizeStartOptions(options)
+	a.mu.Lock()
+	if a.webCmd != nil && a.webCmd.Process != nil {
+		a.mu.Unlock()
+		return a.Status(), errors.New("file-proxy-web is already running")
+	}
+	config := a.config
+	cert := a.certificate
+	token := a.token
+	a.startOptions = options
+	saveErr := a.saveSettingsLocked()
+	a.mu.Unlock()
+	if saveErr != nil {
+		return a.Status(), saveErr
+	}
+
+	if token != "" && (config == nil || cert == nil) {
+		if _, err := a.ensurePeriodicAssets(); err != nil {
+			return a.Status(), err
+		}
+		a.mu.Lock()
+		config = a.config
+		cert = a.certificate
+		a.mu.Unlock()
+	}
+
+	binaryPath, err := extractBundledFileProxyWeb()
+	if err != nil {
+		return a.Status(), err
+	}
+	cmd := exec.Command(binaryPath, buildFileProxyWebArgs(options.Port, config, cert)...)
+	cmd.Dir = filepath.Dir(binaryPath)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return a.Status(), err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return a.Status(), err
+	}
+	if err := cmd.Start(); err != nil {
+		return a.Status(), err
+	}
+
+	a.mu.Lock()
+	a.webCmd = cmd
+	a.lastError = ""
+	a.appendLogLocked("file-proxy-web started at " + webURL(options.Port))
+	a.mu.Unlock()
+	go a.captureOutput("file-proxy-web stdout", stdout)
+	go a.captureOutput("file-proxy-web stderr", stderr)
+	go a.waitProcess("file-proxy-web", cmd)
+
+	url := webURL(options.Port)
+	if options.AutoOpenBrowser {
+		if err := browser.OpenURL(url); err != nil {
+			a.mu.Lock()
+			a.appendLogLocked("open web address failed: " + err.Error())
+			a.mu.Unlock()
+		}
+	}
 	return a.Status(), nil
 }
 
@@ -454,19 +527,69 @@ func buildFileProxyArgs(
 	return args
 }
 
+func buildFileProxyWebArgs(port int, config *PeriodicConfig, cert *CertificatePaths) []string {
+	args := []string{
+		"--host", "127.0.0.1",
+		"--port", fmt.Sprint(port),
+	}
+	if config != nil && cert != nil {
+		args = append(args,
+			"--worker-host", config.PeriodicPort,
+			"--rsa-private-path", cert.ClientPrivatePath,
+			"--rsa-public-path", cert.ServerPublicPath,
+			"--rsa-mode", config.RSAMode,
+			"--client-name", config.ClientName,
+			"--client-token", config.ClientToken,
+			"--prefix", config.FuncPrefix,
+		)
+	}
+	return args
+}
+
 func (a *App) StopFileProxy() (AppStatus, error) {
 	a.mu.Lock()
 	cmd := a.cmd
 	a.mu.Unlock()
-	if cmd == nil || cmd.Process == nil {
-		return a.Status(), nil
-	}
+	return a.Status(), stopCommand(cmd)
+}
 
-	err := cmd.Process.Signal(os.Interrupt)
-	if err != nil {
-		err = cmd.Process.Kill()
+func (a *App) StopFileProxyWeb() (AppStatus, error) {
+	a.mu.Lock()
+	cmd := a.webCmd
+	a.mu.Unlock()
+	return a.Status(), stopCommand(cmd)
+}
+
+func (a *App) OpenWebURL() (AppStatus, error) {
+	status := a.Status()
+	if !status.WebRunning {
+		return status, errors.New("file-proxy-web is not running")
 	}
-	return a.Status(), err
+	if err := browser.OpenURL(status.WebURL); err != nil {
+		return a.Status(), err
+	}
+	return a.Status(), nil
+}
+
+func (a *App) stopAll() (AppStatus, error) {
+	a.mu.Lock()
+	worker := a.cmd
+	web := a.webCmd
+	a.mu.Unlock()
+	if err := stopCommand(web); err != nil {
+		return a.Status(), err
+	}
+	return a.Status(), stopCommand(worker)
+}
+
+func stopCommand(cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil {
+		return nil
+	}
+	if err := cmd.Process.Signal(os.Interrupt); err != nil {
+		return cmd.Process.Kill()
+	}
+	return nil
 }
 
 func (a *App) Status() AppStatus {
@@ -487,6 +610,8 @@ func (a *App) statusLocked() AppStatus {
 		RootDir:      a.rootDir,
 		StartOptions: a.startOptions,
 		Running:      a.cmd != nil && a.cmd.Process != nil,
+		WebRunning:   a.webCmd != nil && a.webCmd.Process != nil,
+		WebURL:       webURLForRunning(a.webCmd, a.startOptions.Port),
 		LastError:    a.lastError,
 		Logs:         logs,
 		BinaryTarget: binaryTarget(),
@@ -666,7 +791,7 @@ func settingsPath() (string, error) {
 }
 
 func defaultStartOptions() StartOptions {
-	return StartOptions{Thread: defaultThread}
+	return StartOptions{Thread: defaultThread, Port: defaultWebPort, AutoOpenBrowser: true}
 }
 
 func normalizeAPIBaseURL(value string) (string, error) {
@@ -699,6 +824,9 @@ func normalizeStartOptions(options StartOptions) StartOptions {
 	}
 	if options.Thread > maxThread {
 		options.Thread = maxThread
+	}
+	if options.Port <= 0 || options.Port > maxWebPort {
+		options.Port = defaultWebPort
 	}
 	return options
 }
@@ -785,6 +913,13 @@ func bundledBinaryName() string {
 	return "file-proxy"
 }
 
+func bundledWebBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "file-proxy-web.exe"
+	}
+	return "file-proxy-web"
+}
+
 func removeQuarantineAttribute(path string) {
 	if runtime.GOOS != "darwin" {
 		return
@@ -862,8 +997,26 @@ func extractBundledSupportFiles(target string, executablePath string) error {
 }
 
 func extractBundledFileProxy() (string, error) {
+	return extractBundledBinary(bundledBinaryName())
+}
+
+func extractBundledFileProxyWeb() (string, error) {
+	return extractBundledBinary(bundledWebBinaryName())
+}
+
+func extractBundledWorkers() (string, error) {
+	worker, err := extractBundledFileProxy()
+	if err != nil {
+		return "", err
+	}
+	if _, err := extractBundledFileProxyWeb(); err != nil {
+		return "", err
+	}
+	return worker, nil
+}
+
+func extractBundledBinary(name string) (string, error) {
 	target := binaryTarget()
-	name := bundledBinaryName()
 	embeddedPath := filepath.ToSlash(filepath.Join("bin", target, name))
 
 	dir, err := appRuntimeDir()
@@ -876,7 +1029,7 @@ func extractBundledFileProxy() (string, error) {
 		mode = 0o644
 	}
 	if err := writeBundledFile(embeddedPath, outPath, mode); err != nil {
-		return "", fmt.Errorf("bundled file-proxy binary missing for %s: %w", target, err)
+		return "", fmt.Errorf("bundled %s binary missing for %s: %w", name, target, err)
 	}
 	if err := extractBundledSupportFiles(target, outPath); err != nil {
 		return "", err
@@ -898,19 +1051,33 @@ func (a *App) captureOutput(label string, reader io.Reader) {
 	}
 }
 
-func (a *App) waitProcess(cmd *exec.Cmd) {
+func (a *App) waitProcess(name string, cmd *exec.Cmd) {
 	err := cmd.Wait()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.cmd == cmd {
 		a.cmd = nil
 	}
+	if a.webCmd == cmd {
+		a.webCmd = nil
+	}
 	if err != nil {
 		a.lastError = err.Error()
-		a.appendLogLocked("file-proxy exited: " + err.Error())
+		a.appendLogLocked(name + " exited: " + err.Error())
 		return
 	}
-	a.appendLogLocked("file-proxy stopped")
+	a.appendLogLocked(name + " stopped")
+}
+
+func webURL(port int) string {
+	return fmt.Sprintf("http://127.0.0.1:%d/", port)
+}
+
+func webURLForRunning(cmd *exec.Cmd, port int) string {
+	if cmd == nil || cmd.Process == nil {
+		return ""
+	}
+	return webURL(port)
 }
 
 func (a *App) appendLogLocked(line string) {

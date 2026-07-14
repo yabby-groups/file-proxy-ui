@@ -50,6 +50,63 @@ input {
   gap: 8px;
 }
 
+.languageSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 38px;
+  padding: 3px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #667085;
+  background: #ffffff;
+}
+
+.serviceSwitch {
+  display: inline-flex;
+  height: 38px;
+  padding: 3px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.serviceSwitch button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  color: #667085;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.serviceSwitch button.active {
+  color: #ffffff;
+  background: #13715f;
+}
+
+.languageSwitch svg {
+  margin: 0 4px 0 5px;
+}
+
+.languageSwitch button {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  color: #667085;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.languageSwitch button.active {
+  color: #ffffff;
+  background: #13715f;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -102,7 +159,7 @@ h2 {
 .grid {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: minmax(220px, 0.9fr) minmax(260px, 1.15fr) minmax(280px, 1.25fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -120,6 +177,45 @@ h2 {
   align-items: center;
   gap: 8px;
   margin-bottom: 14px;
+}
+
+.panelTitle,
+.serviceHeader {
+  display: flex;
+  align-items: center;
+}
+
+.panelTitle {
+  gap: 8px;
+}
+
+.serviceHeader {
+  justify-content: space-between;
+}
+
+.serviceState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.serviceState span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #98a2b3;
+}
+
+.serviceState.running {
+  color: #0d6b59;
+}
+
+.serviceState.running span {
+  background: #15946f;
+  box-shadow: 0 0 0 3px #e1f4ed;
 }
 
 label {
@@ -313,6 +409,39 @@ button:disabled {
   color: #172033;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.webAddress {
+  margin-bottom: 12px;
+}
+
+.webAddressLabel {
+  display: block;
+  margin-bottom: 6px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 640;
+}
+
+.webAddressValue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px 38px;
+  gap: 8px;
+}
+
+.webAddressLink {
+  min-width: 0;
+  justify-content: flex-start;
+  overflow: hidden;
+  padding: 0 10px;
+  color: #0d6b59;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.webAddressLink:disabled {
+  color: #667085;
 }
 
 .notice {

@@ -1,15 +1,17 @@
 # Myna File Proxy
 
-Wails desktop GUI for starting a bundled `file-proxy` worker.
+Wails desktop GUI for starting bundled `file-proxy` and `file-proxy-web` binaries.
 
 The app logs into `https://iot.huabot.com`, creates or fetches the current
 user's sandbox periodic config, downloads the periodic certificate bundle,
-asks the user to select a local root directory, and starts `file-proxy`.
+asks the user to select a local root directory, and starts each service independently.
+The web gateway listens on `127.0.0.1` and provides a browser UI for a running
+worker.
 
 ## Bundled binaries
 
 Release builds download the bundled `file-proxy` workers from the upstream
-GitHub release before invoking Wails. The default worker release is `v1.1.0.0`.
+GitHub release before invoking Wails. The default worker release is `v1.2.0.0`.
 
 Downloaded worker binaries are extracted into:
 
@@ -18,6 +20,10 @@ Downloaded worker binaries are extracted into:
 - `bin/windows-amd64/file-proxy.exe`
 - `bin/linux-amd64/file-proxy`
 - `bin/linux-arm64/file-proxy`
+
+Every supported v1.2.0.0 archive also provides the matching
+`file-proxy-web` executable in the same directory. The desktop application
+extracts and manages the worker and web gateway independently.
 
 The macOS aarch64 worker archive also includes `lib/file-proxy/*.dylib`
 runtime libraries, which are bundled and extracted next to the app-managed
@@ -80,11 +86,11 @@ Useful environment overrides:
 - `RUN_TESTS=0` skips `go test ./...`.
 - `DOWNLOAD_WORKERS=0` disables upstream worker downloads before building.
 - `WORKER_CACHE_REFRESH=0` reuses an existing downloaded worker archive without checking the remote asset.
-- `UPDATE_WORKERS_ONLY=1` updates `bin/<target>/file-proxy` and exits before Wails builds.
-- `FILE_PROXY_VERSION=v1.0.0.0` changes the upstream worker release version.
+- `UPDATE_WORKERS_ONLY=1` updates `bin/<target>/file-proxy` and `file-proxy-web` and exits before Wails builds.
+- `FILE_PROXY_VERSION=v1.2.0.0` changes the upstream worker release version.
 - `FILE_PROXY_RELEASE_BASE=https://github.com/Lupino/file-proxy/releases/download` changes the release base URL.
-- `LOCAL_WORKER_BIN=/path/to/file-proxy` copies a local worker executable into the selected target's `bin/`.
-- `LOCAL_WORKER_BUNDLE=/path/to/bundle` copies `bin/file-proxy` and `lib/file-proxy` from a local bundle into the selected target's `bin/`.
+- `LOCAL_WORKER_BIN=/path/to/file-proxy` copies it and a sibling `file-proxy-web` executable into the selected target's `bin/`.
+- `LOCAL_WORKER_BUNDLE=/path/to/bundle` copies both executables and `lib/file-proxy` from a local bundle into the selected target's `bin/`.
 - `SKIP_UNSUPPORTED=1` skips missing worker binaries and Wails targets that cannot be built on the current host.
 - `WAILS_FLAGS="-trimpath"` appends extra `wails build` flags.
 - `GO_ENV_PREFIX="GOSUMDB=off GOPROXY=off"` runs Go/Wails with an explicit Go environment.

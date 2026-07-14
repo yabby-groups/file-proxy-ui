@@ -3,6 +3,8 @@ export namespace main {
 	export class StartOptions {
 	    thread: number;
 	    allow_delete: boolean;
+	    port: number;
+	    auto_open_browser: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new StartOptions(source);
@@ -12,6 +14,8 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.thread = source["thread"];
 	        this.allow_delete = source["allow_delete"];
+	        this.port = source["port"];
+	        this.auto_open_browser = source["auto_open_browser"];
 	    }
 	}
 	export class CertificatePaths {
@@ -84,6 +88,8 @@ export namespace main {
 	    root_dir: string;
 	    start_options: StartOptions;
 	    running: boolean;
+	    web_running: boolean;
+	    web_url: string;
 	    last_error: string;
 	    logs: string[];
 	    binary_target: string;
@@ -103,6 +109,8 @@ export namespace main {
 	        this.root_dir = source["root_dir"];
 	        this.start_options = this.convertValues(source["start_options"], StartOptions);
 	        this.running = source["running"];
+	        this.web_running = source["web_running"];
+	        this.web_url = source["web_url"];
 	        this.last_error = source["last_error"];
 	        this.logs = source["logs"];
 	        this.binary_target = source["binary_target"];
