@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +14,37 @@ import (
 	"testing"
 	"time"
 )
+
+func TestLoginForwardsTOTPCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/signin/" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse login form: %v", err)
+		}
+		if got := r.Form.Get("name"); got != "alice" {
+			t.Errorf("name = %q, want alice", got)
+		}
+		if got := r.Form.Get("passwd"); got != "secret" {
+			t.Errorf("passwd = %q, want secret", got)
+		}
+		if got := r.Form.Get("totp_code"); got != "123456" {
+			t.Errorf("totp_code = %q, want 123456", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"err":"totp invalid"}`))
+	}))
+	defer server.Close()
+
+	app := NewApp()
+	app.apiBaseURL = server.URL
+	_, err := app.Login(" alice ", "secret", " 123456 ")
+	if err == nil || err.Error() != "totp invalid" {
+		t.Fatalf("Login error = %v, want totp invalid", err)
+	}
+}
 
 func TestSplitCertificateBundle(t *testing.T) {
 	bundle := strings.Join([]string{

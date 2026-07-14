@@ -150,7 +150,7 @@ func (a *App) shutdown(ctx context.Context) {
 	_, _ = a.stopAll()
 }
 
-func (a *App) Login(name string, passwd string) (AppStatus, error) {
+func (a *App) Login(name string, passwd string, totpCode string) (AppStatus, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return a.Status(), errors.New("username is required")
@@ -162,6 +162,7 @@ func (a *App) Login(name string, passwd string) (AppStatus, error) {
 	form := url.Values{}
 	form.Set("name", name)
 	form.Set("passwd", passwd)
+	form.Set("totp_code", strings.TrimSpace(totpCode))
 	var out LoginResponse
 	if err := a.doForm("POST", "/api/signin/", form, "", &out); err != nil {
 		return a.Status(), err
