@@ -26,7 +26,9 @@ Downloaded worker binaries are extracted into:
 
 Every supported v1.2.1.0 archive also provides matching `file-proxy-web` and
 `file-proxy-web-standalone` executables in the same directory. The desktop
-application extracts and manages all three services independently.
+application extracts and manages all three services independently. Platform
+build constraints embed only the matching `bin/<os>-<arch>/` directory in each
+desktop artifact.
 
 The macOS aarch64 worker archive also includes `lib/file-proxy/*.dylib`
 runtime libraries, which are bundled and extracted next to the app-managed

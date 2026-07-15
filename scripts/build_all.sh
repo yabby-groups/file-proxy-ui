@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="MynaFileProxy"
 OUT_DIR="${OUT_DIR:-$ROOT/dist}"
-TARGETS="${TARGETS:-darwin/arm64 darwin/amd64 windows/amd64 linux/amd64 linux/arm64}"
+TARGETS="${TARGETS:-darwin/arm64 windows/amd64 linux/amd64 linux/arm64}"
 RUN_TESTS="${RUN_TESTS:-1}"
 WAILS_FLAGS="${WAILS_FLAGS:-}"
 GO_ENV_PREFIX="${GO_ENV_PREFIX:-}"
