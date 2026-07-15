@@ -4,11 +4,11 @@ Wails desktop GUI for starting bundled `file-proxy`, `file-proxy-web`, and
 `file-proxy-web-standalone` binaries.
 
 The app logs into `https://iot.huabot.com`, creates or fetches the current
-user's sandbox periodic config, downloads the periodic certificate bundle,
+user's sandbox workspace config, downloads the certificate bundle,
 asks the user to select a local root directory, and starts each service independently.
-The Periodic web gateway listens on `127.0.0.1` and provides a browser UI for a
+The managed web gateway listens on `127.0.0.1` and provides a browser UI for a
 running worker. The standalone web service also listens on loopback, but serves
-an independently selected local root directly without login, Periodic, or
+an independently selected local root directly without login or
 certificates.
 
 ## Bundled binaries

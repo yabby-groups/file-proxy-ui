@@ -85,31 +85,31 @@ const translations = {
     securityNotes: "Access and safety",
     setup: "Service setup",
     loginRequired: "Sign in to configure and start this service.",
-    workerSummary: "Share one selected folder through your Periodic workspace.",
+    workerSummary: "Share one selected folder through your workspace.",
     workerFlow:
       "Sign in, select a local root directory, then start the managed file worker.",
     workerSafety:
       "The selected root defines the accessible files. Deletion remains disabled unless you explicitly allow it.",
     workerSteps: [
-      "Sign in to your Periodic account.",
+      "Sign in to your account.",
       "Choose the folder to expose.",
       "Set threads and deletion permission, then start.",
     ],
     clientSummary:
-      "Open the local browser gateway for your Periodic file service.",
+      "Open the local browser gateway for your file service.",
     clientFlow:
       "The client connects your signed-in workspace to a browser interface running on this computer.",
     clientSafety:
       "The browser gateway listens only on localhost. Start the file service first so its files are available.",
     clientSteps: [
-      "Sign in to your Periodic account.",
+      "Sign in to your account.",
       "Start the file service if it is not running.",
       "Choose a local port and start the browser gateway.",
     ],
     standaloneSummary:
       "Browse and manage a local folder directly in your browser.",
     standaloneFlow:
-      "This mode serves the selected folder without a Periodic account, certificates, or a running file service.",
+      "This mode serves the selected folder without an account, certificates, or a running file service.",
     standaloneSafety:
       "The browser interface listens only on localhost. Enable deletion only for folders you are prepared to modify.",
     standaloneSteps: [
@@ -170,26 +170,26 @@ const translations = {
     securityNotes: "访问与安全",
     setup: "服务配置",
     loginRequired: "登录后即可配置并启动此服务。",
-    workerSummary: "将选定目录作为 Periodic 工作区中的受控文件服务。",
+    workerSummary: "将选定目录作为当前工作区中的受控文件服务。",
     workerFlow: "登录后选择本机根目录，再启动受管理的文件服务进程。",
     workerSafety:
       "根目录决定可访问的文件范围；除非明确开启，否则不允许删除文件。",
     workerSteps: [
-      "登录 Periodic 账户。",
+      "登录账户。",
       "选择需要提供访问的目录。",
       "设置线程数和删除权限后启动。",
     ],
-    clientSummary: "为 Periodic 文件服务启动本机浏览器访问入口。",
+    clientSummary: "为文件服务启动本机浏览器访问入口。",
     clientFlow: "客户端会连接已登录的工作区，并在此电脑上启动浏览器管理界面。",
     clientSafety:
       "浏览器入口仅监听 localhost。请先启动文件服务，才能访问其中的文件。",
     clientSteps: [
-      "登录 Periodic 账户。",
+      "登录账户。",
       "确认文件服务已经启动。",
       "选择本机端口后启动浏览器入口。",
     ],
     standaloneSummary: "直接在浏览器中管理一个本机目录。",
-    standaloneFlow: "此模式不需要 Periodic 账户、证书或正在运行的文件服务。",
+    standaloneFlow: "此模式不需要账户、证书或正在运行的文件服务。",
     standaloneSafety:
       "浏览器入口仅监听 localhost。只应为允许修改的目录开启删除权限。",
     standaloneSteps: [
