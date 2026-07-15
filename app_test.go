@@ -79,6 +79,9 @@ func TestBundledBinaryName(t *testing.T) {
 	if bundledBinaryName() == "" {
 		t.Fatal("expected binary name")
 	}
+	if bundledStandaloneWebBinaryName() == "" {
+		t.Fatal("expected standalone web binary name")
+	}
 }
 
 func TestWriteBundledFileOverwritesSameSizeDifferentContent(t *testing.T) {
@@ -270,6 +273,22 @@ func TestBuildFileProxyWebArgsAllowsMissingPeriodicConfig(t *testing.T) {
 	}
 }
 
+func TestBuildFileProxyWebStandaloneArgs(t *testing.T) {
+	args := buildFileProxyWebStandaloneArgs("/tmp/standalone-root", StandaloneStartOptions{
+		Port:        8081,
+		AllowDelete: true,
+	})
+	expected := []string{
+		"--host", "127.0.0.1",
+		"--port", "8081",
+		"--root", "/tmp/standalone-root",
+		"--allow-delete",
+	}
+	if !reflect.DeepEqual(args, expected) {
+		t.Fatalf("args mismatch:\nwant %#v\ngot %#v", expected, args)
+	}
+}
+
 func TestNormalizeStartOptionsBoundsThread(t *testing.T) {
 	if got := normalizeStartOptions(StartOptions{}).Thread; got != defaultThread {
 		t.Fatalf("default thread mismatch: %d", got)
@@ -298,6 +317,22 @@ func TestNormalizeStartOptionsDefaultsAndBoundsPort(t *testing.T) {
 	}
 }
 
+func TestNormalizeStandaloneStartOptionsDefaultsAndBoundsPort(t *testing.T) {
+	defaults := defaultStandaloneStartOptions()
+	if defaults.Port != defaultStandaloneWebPort || !defaults.AutoOpenBrowser {
+		t.Fatalf("unexpected standalone defaults: %#v", defaults)
+	}
+	if got := normalizeStandaloneStartOptions(StandaloneStartOptions{}); got.Port != defaultStandaloneWebPort {
+		t.Fatalf("default standalone port mismatch: %d", got.Port)
+	}
+	if got := normalizeStandaloneStartOptions(StandaloneStartOptions{Port: maxWebPort + 1}); got.Port != defaultStandaloneWebPort {
+		t.Fatalf("invalid standalone port should use default, got %d", got.Port)
+	}
+	if got := normalizeStandaloneStartOptions(StandaloneStartOptions{Port: 9124}); got.Port != 9124 {
+		t.Fatalf("expected explicit standalone port to be preserved, got %d", got.Port)
+	}
+}
+
 func TestSettingsPersistRootDirectoryAndStartOptions(t *testing.T) {
 	configRoot := t.TempDir()
 	if runtime.GOOS == "windows" {
@@ -321,6 +356,8 @@ func TestSettingsPersistRootDirectoryAndStartOptions(t *testing.T) {
 	app.apiBaseURL = "https://api.example.test"
 	app.rootDir = "/tmp/file-proxy-root"
 	app.startOptions = StartOptions{Thread: 32, AllowDelete: true, Port: 9123, AutoOpenBrowser: false}
+	app.standaloneRootDir = "/tmp/standalone-root"
+	app.standaloneStartOptions = StandaloneStartOptions{AllowDelete: true, Port: 9124, AutoOpenBrowser: false}
 	if err := app.saveSettingsLocked(); err != nil {
 		app.mu.Unlock()
 		t.Fatalf("saveSettingsLocked returned error: %v", err)
@@ -346,6 +383,12 @@ func TestSettingsPersistRootDirectoryAndStartOptions(t *testing.T) {
 	}
 	if status.StartOptions.Port != 9123 || status.StartOptions.AutoOpenBrowser {
 		t.Fatalf("web start options mismatch: %#v", status.StartOptions)
+	}
+	if status.StandaloneRootDir != "/tmp/standalone-root" {
+		t.Fatalf("standalone root dir mismatch: %q", status.StandaloneRootDir)
+	}
+	if !status.StandaloneStartOptions.AllowDelete || status.StandaloneStartOptions.Port != 9124 || status.StandaloneStartOptions.AutoOpenBrowser {
+		t.Fatalf("standalone start options mismatch: %#v", status.StandaloneStartOptions)
 	}
 	if !status.LoggedIn {
 		t.Fatal("expected login state to be restored")
@@ -520,6 +563,38 @@ func TestLogoutStopsRunningWorker(t *testing.T) {
 		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatal("expected logout to stop running worker")
+}
+
+func TestStopAllStopsStandaloneWeb(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess", "--")
+	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start helper process: %v", err)
+	}
+	defer func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+	}()
+
+	app := NewApp()
+	app.mu.Lock()
+	app.standaloneWebCmd = cmd
+	app.mu.Unlock()
+	go app.waitProcess("file-proxy-web-standalone", cmd)
+
+	if _, err := app.stopAll(); err != nil {
+		t.Fatalf("stopAll returned error: %v", err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if !app.Status().StandaloneWebRunning {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("expected stopAll to stop standalone web")
 }
 
 func TestHelperProcess(t *testing.T) {

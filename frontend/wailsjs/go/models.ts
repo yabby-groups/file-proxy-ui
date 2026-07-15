@@ -1,5 +1,21 @@
 export namespace main {
-	
+
+	export class StandaloneStartOptions {
+	    allow_delete: boolean;
+	    port: number;
+	    auto_open_browser: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new StandaloneStartOptions(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.allow_delete = source["allow_delete"];
+	        this.port = source["port"];
+	        this.auto_open_browser = source["auto_open_browser"];
+	    }
+	}
 	export class StartOptions {
 	    thread: number;
 	    allow_delete: boolean;
@@ -90,6 +106,10 @@ export namespace main {
 	    running: boolean;
 	    web_running: boolean;
 	    web_url: string;
+	    standalone_root_dir: string;
+	    standalone_start_options: StandaloneStartOptions;
+	    standalone_web_running: boolean;
+	    standalone_web_url: string;
 	    last_error: string;
 	    logs: string[];
 	    binary_target: string;
@@ -111,6 +131,10 @@ export namespace main {
 	        this.running = source["running"];
 	        this.web_running = source["web_running"];
 	        this.web_url = source["web_url"];
+	        this.standalone_root_dir = source["standalone_root_dir"];
+	        this.standalone_start_options = this.convertValues(source["standalone_start_options"], StandaloneStartOptions);
+	        this.standalone_web_running = source["standalone_web_running"];
+	        this.standalone_web_url = source["standalone_web_url"];
 	        this.last_error = source["last_error"];
 	        this.logs = source["logs"];
 	        this.binary_target = source["binary_target"];
@@ -139,4 +163,3 @@ export namespace main {
 	
 
 }
-

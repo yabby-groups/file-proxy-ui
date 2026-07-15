@@ -10,12 +10,20 @@ export function Logout() {
   return window['go']['main']['App']['Logout']();
 }
 
+export function OpenStandaloneWebURL() {
+  return window['go']['main']['App']['OpenStandaloneWebURL']();
+}
+
 export function OpenWebURL() {
   return window['go']['main']['App']['OpenWebURL']();
 }
 
 export function SelectRootDirectory() {
   return window['go']['main']['App']['SelectRootDirectory']();
+}
+
+export function SelectStandaloneRootDirectory() {
+  return window['go']['main']['App']['SelectStandaloneRootDirectory']();
 }
 
 export function SetAPIBaseURL(arg1) {
@@ -30,6 +38,10 @@ export function StartFileProxyWeb(arg1) {
   return window['go']['main']['App']['StartFileProxyWeb'](arg1);
 }
 
+export function StartFileProxyWebStandalone(arg1) {
+  return window['go']['main']['App']['StartFileProxyWebStandalone'](arg1);
+}
+
 export function Status() {
   return window['go']['main']['App']['Status']();
 }
@@ -40,4 +52,8 @@ export function StopFileProxy() {
 
 export function StopFileProxyWeb() {
   return window['go']['main']['App']['StopFileProxyWeb']();
+}
+
+export function StopFileProxyWebStandalone() {
+  return window['go']['main']['App']['StopFileProxyWebStandalone']();
 }

@@ -24,29 +24,33 @@ import (
 )
 
 const (
-	defaultAPIBaseURL = "https://iot.huabot.com"
-	defaultThread     = 4
-	maxThread         = 16
-	defaultWebPort    = 8080
-	maxWebPort        = 65535
+	defaultAPIBaseURL        = "https://iot.huabot.com"
+	defaultThread            = 4
+	maxThread                = 16
+	defaultWebPort           = 8080
+	defaultStandaloneWebPort = 8081
+	maxWebPort               = 65535
 )
 
 type App struct {
 	ctx context.Context
 
-	mu           sync.Mutex
-	apiBaseURL   string
-	token        string
-	userName     string
-	userInfo     UserInfo
-	config       *PeriodicConfig
-	certificate  *CertificatePaths
-	rootDir      string
-	startOptions StartOptions
-	cmd          *exec.Cmd
-	webCmd       *exec.Cmd
-	logs         []string
-	lastError    string
+	mu                     sync.Mutex
+	apiBaseURL             string
+	token                  string
+	userName               string
+	userInfo               UserInfo
+	config                 *PeriodicConfig
+	certificate            *CertificatePaths
+	rootDir                string
+	startOptions           StartOptions
+	standaloneRootDir      string
+	standaloneStartOptions StandaloneStartOptions
+	cmd                    *exec.Cmd
+	webCmd                 *exec.Cmd
+	standaloneWebCmd       *exec.Cmd
+	logs                   []string
+	lastError              string
 }
 
 type APIErrorResponse struct {
@@ -88,20 +92,24 @@ type UserInfo struct {
 }
 
 type AppStatus struct {
-	APIBaseURL   string            `json:"api_base_url"`
-	LoggedIn     bool              `json:"logged_in"`
-	UserName     string            `json:"user_name"`
-	UserInfo     UserInfo          `json:"user_info"`
-	Config       *PeriodicConfig   `json:"config"`
-	Certificate  *CertificatePaths `json:"certificate"`
-	RootDir      string            `json:"root_dir"`
-	StartOptions StartOptions      `json:"start_options"`
-	Running      bool              `json:"running"`
-	WebRunning   bool              `json:"web_running"`
-	WebURL       string            `json:"web_url"`
-	LastError    string            `json:"last_error"`
-	Logs         []string          `json:"logs"`
-	BinaryTarget string            `json:"binary_target"`
+	APIBaseURL             string                 `json:"api_base_url"`
+	LoggedIn               bool                   `json:"logged_in"`
+	UserName               string                 `json:"user_name"`
+	UserInfo               UserInfo               `json:"user_info"`
+	Config                 *PeriodicConfig        `json:"config"`
+	Certificate            *CertificatePaths      `json:"certificate"`
+	RootDir                string                 `json:"root_dir"`
+	StartOptions           StartOptions           `json:"start_options"`
+	Running                bool                   `json:"running"`
+	WebRunning             bool                   `json:"web_running"`
+	WebURL                 string                 `json:"web_url"`
+	StandaloneRootDir      string                 `json:"standalone_root_dir"`
+	StandaloneStartOptions StandaloneStartOptions `json:"standalone_start_options"`
+	StandaloneWebRunning   bool                   `json:"standalone_web_running"`
+	StandaloneWebURL       string                 `json:"standalone_web_url"`
+	LastError              string                 `json:"last_error"`
+	Logs                   []string               `json:"logs"`
+	BinaryTarget           string                 `json:"binary_target"`
 }
 
 type StartOptions struct {
@@ -111,19 +119,28 @@ type StartOptions struct {
 	AutoOpenBrowser bool `json:"auto_open_browser"`
 }
 
+type StandaloneStartOptions struct {
+	AllowDelete     bool `json:"allow_delete"`
+	Port            int  `json:"port"`
+	AutoOpenBrowser bool `json:"auto_open_browser"`
+}
+
 type StoredSettings struct {
-	APIBaseURL   string       `json:"api_base_url"`
-	RootDir      string       `json:"root_dir"`
-	StartOptions StartOptions `json:"start_options"`
-	Token        string       `json:"token"`
-	UserName     string       `json:"user_name"`
-	UserInfo     UserInfo     `json:"user_info"`
+	APIBaseURL             string                 `json:"api_base_url"`
+	RootDir                string                 `json:"root_dir"`
+	StartOptions           StartOptions           `json:"start_options"`
+	StandaloneRootDir      string                 `json:"standalone_root_dir"`
+	StandaloneStartOptions StandaloneStartOptions `json:"standalone_start_options"`
+	Token                  string                 `json:"token"`
+	UserName               string                 `json:"user_name"`
+	UserInfo               UserInfo               `json:"user_info"`
 }
 
 func NewApp() *App {
 	return &App{
-		apiBaseURL:   defaultAPIBaseURL,
-		startOptions: defaultStartOptions(),
+		apiBaseURL:             defaultAPIBaseURL,
+		startOptions:           defaultStartOptions(),
+		standaloneStartOptions: defaultStandaloneStartOptions(),
 	}
 }
 
@@ -361,6 +378,28 @@ func (a *App) SelectRootDirectory() (AppStatus, error) {
 	return a.Status(), nil
 }
 
+func (a *App) SelectStandaloneRootDirectory() (AppStatus, error) {
+	dir, err := wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "Select standalone web root directory",
+	})
+	if err != nil {
+		return a.Status(), err
+	}
+	if dir == "" {
+		return a.Status(), nil
+	}
+	a.mu.Lock()
+	a.standaloneRootDir = dir
+	a.lastError = ""
+	a.appendLogLocked("standalone root directory selected: " + dir)
+	saveErr := a.saveSettingsLocked()
+	a.mu.Unlock()
+	if saveErr != nil {
+		return a.Status(), saveErr
+	}
+	return a.Status(), nil
+}
+
 func (a *App) StartFileProxy(options StartOptions) (AppStatus, error) {
 	options = normalizeStartOptions(options)
 	a.mu.Lock()
@@ -499,6 +538,62 @@ func (a *App) StartFileProxyWeb(options StartOptions) (AppStatus, error) {
 	return a.Status(), nil
 }
 
+func (a *App) StartFileProxyWebStandalone(options StandaloneStartOptions) (AppStatus, error) {
+	options = normalizeStandaloneStartOptions(options)
+	a.mu.Lock()
+	if a.standaloneWebCmd != nil && a.standaloneWebCmd.Process != nil {
+		a.mu.Unlock()
+		return a.Status(), errors.New("file-proxy-web-standalone is already running")
+	}
+	root := a.standaloneRootDir
+	a.standaloneStartOptions = options
+	saveErr := a.saveSettingsLocked()
+	a.mu.Unlock()
+	if saveErr != nil {
+		return a.Status(), saveErr
+	}
+	if strings.TrimSpace(root) == "" {
+		return a.Status(), errors.New("standalone root directory is required")
+	}
+
+	binaryPath, err := extractBundledFileProxyWebStandalone()
+	if err != nil {
+		return a.Status(), err
+	}
+	cmd := exec.Command(binaryPath, buildFileProxyWebStandaloneArgs(root, options)...)
+	cmd.Dir = filepath.Dir(binaryPath)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return a.Status(), err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return a.Status(), err
+	}
+	if err := cmd.Start(); err != nil {
+		return a.Status(), err
+	}
+
+	a.mu.Lock()
+	a.standaloneWebCmd = cmd
+	a.lastError = ""
+	a.appendLogLocked("file-proxy-web-standalone started at " + webURL(options.Port))
+	a.mu.Unlock()
+	go a.captureOutput("file-proxy-web-standalone stdout", stdout)
+	go a.captureOutput("file-proxy-web-standalone stderr", stderr)
+	go a.waitProcess("file-proxy-web-standalone", cmd)
+
+	url := webURL(options.Port)
+	if options.AutoOpenBrowser {
+		if err := browser.OpenURL(url); err != nil {
+			a.mu.Lock()
+			a.appendLogLocked("open standalone web address failed: " + err.Error())
+			a.mu.Unlock()
+		}
+	}
+	return a.Status(), nil
+}
+
 func buildFileProxyArgs(
 	root string,
 	thread int,
@@ -546,6 +641,18 @@ func buildFileProxyWebArgs(port int, config *PeriodicConfig, cert *CertificatePa
 	return args
 }
 
+func buildFileProxyWebStandaloneArgs(root string, options StandaloneStartOptions) []string {
+	args := []string{
+		"--host", "127.0.0.1",
+		"--port", fmt.Sprint(options.Port),
+		"--root", root,
+	}
+	if options.AllowDelete {
+		args = append(args, "--allow-delete")
+	}
+	return args
+}
+
 func (a *App) StopFileProxy() (AppStatus, error) {
 	a.mu.Lock()
 	cmd := a.cmd
@@ -556,6 +663,13 @@ func (a *App) StopFileProxy() (AppStatus, error) {
 func (a *App) StopFileProxyWeb() (AppStatus, error) {
 	a.mu.Lock()
 	cmd := a.webCmd
+	a.mu.Unlock()
+	return a.Status(), stopCommand(cmd)
+}
+
+func (a *App) StopFileProxyWebStandalone() (AppStatus, error) {
+	a.mu.Lock()
+	cmd := a.standaloneWebCmd
 	a.mu.Unlock()
 	return a.Status(), stopCommand(cmd)
 }
@@ -571,11 +685,26 @@ func (a *App) OpenWebURL() (AppStatus, error) {
 	return a.Status(), nil
 }
 
+func (a *App) OpenStandaloneWebURL() (AppStatus, error) {
+	status := a.Status()
+	if !status.StandaloneWebRunning {
+		return status, errors.New("file-proxy-web-standalone is not running")
+	}
+	if err := browser.OpenURL(status.StandaloneWebURL); err != nil {
+		return a.Status(), err
+	}
+	return a.Status(), nil
+}
+
 func (a *App) stopAll() (AppStatus, error) {
 	a.mu.Lock()
 	worker := a.cmd
 	web := a.webCmd
+	standaloneWeb := a.standaloneWebCmd
 	a.mu.Unlock()
+	if err := stopCommand(standaloneWeb); err != nil {
+		return a.Status(), err
+	}
 	if err := stopCommand(web); err != nil {
 		return a.Status(), err
 	}
@@ -601,20 +730,24 @@ func (a *App) Status() AppStatus {
 func (a *App) statusLocked() AppStatus {
 	logs := append([]string(nil), a.logs...)
 	return AppStatus{
-		APIBaseURL:   a.apiBaseURL,
-		LoggedIn:     a.token != "",
-		UserName:     a.userName,
-		UserInfo:     a.userInfo,
-		Config:       a.config,
-		Certificate:  a.certificate,
-		RootDir:      a.rootDir,
-		StartOptions: a.startOptions,
-		Running:      a.cmd != nil && a.cmd.Process != nil,
-		WebRunning:   a.webCmd != nil && a.webCmd.Process != nil,
-		WebURL:       webURLForRunning(a.webCmd, a.startOptions.Port),
-		LastError:    a.lastError,
-		Logs:         logs,
-		BinaryTarget: binaryTarget(),
+		APIBaseURL:             a.apiBaseURL,
+		LoggedIn:               a.token != "",
+		UserName:               a.userName,
+		UserInfo:               a.userInfo,
+		Config:                 a.config,
+		Certificate:            a.certificate,
+		RootDir:                a.rootDir,
+		StartOptions:           a.startOptions,
+		Running:                a.cmd != nil && a.cmd.Process != nil,
+		WebRunning:             a.webCmd != nil && a.webCmd.Process != nil,
+		WebURL:                 webURLForRunning(a.webCmd, a.startOptions.Port),
+		StandaloneRootDir:      a.standaloneRootDir,
+		StandaloneStartOptions: a.standaloneStartOptions,
+		StandaloneWebRunning:   a.standaloneWebCmd != nil && a.standaloneWebCmd.Process != nil,
+		StandaloneWebURL:       webURLForRunning(a.standaloneWebCmd, a.standaloneStartOptions.Port),
+		LastError:              a.lastError,
+		Logs:                   logs,
+		BinaryTarget:           binaryTarget(),
 	}
 }
 
@@ -794,6 +927,10 @@ func defaultStartOptions() StartOptions {
 	return StartOptions{Thread: defaultThread, Port: defaultWebPort, AutoOpenBrowser: true}
 }
 
+func defaultStandaloneStartOptions() StandaloneStartOptions {
+	return StandaloneStartOptions{Port: defaultStandaloneWebPort, AutoOpenBrowser: true}
+}
+
 func normalizeAPIBaseURL(value string) (string, error) {
 	text := strings.TrimSpace(value)
 	if text == "" {
@@ -831,6 +968,13 @@ func normalizeStartOptions(options StartOptions) StartOptions {
 	return options
 }
 
+func normalizeStandaloneStartOptions(options StandaloneStartOptions) StandaloneStartOptions {
+	if options.Port <= 0 || options.Port > maxWebPort {
+		options.Port = defaultStandaloneWebPort
+	}
+	return options
+}
+
 func (a *App) loadSettings() error {
 	path, err := settingsPath()
 	if err != nil {
@@ -860,6 +1004,8 @@ func (a *App) loadSettings() error {
 	}
 	a.rootDir = settings.RootDir
 	a.startOptions = normalizeStartOptions(settings.StartOptions)
+	a.standaloneRootDir = settings.StandaloneRootDir
+	a.standaloneStartOptions = normalizeStandaloneStartOptions(settings.StandaloneStartOptions)
 	a.token = strings.TrimSpace(settings.Token)
 	a.userName = settings.UserName
 	a.userInfo = settings.UserInfo
@@ -876,12 +1022,14 @@ func (a *App) saveSettingsLocked() error {
 		return err
 	}
 	settings := StoredSettings{
-		APIBaseURL:   a.apiBaseURL,
-		RootDir:      a.rootDir,
-		StartOptions: normalizeStartOptions(a.startOptions),
-		Token:        a.token,
-		UserName:     a.userName,
-		UserInfo:     a.userInfo,
+		APIBaseURL:             a.apiBaseURL,
+		RootDir:                a.rootDir,
+		StartOptions:           normalizeStartOptions(a.startOptions),
+		StandaloneRootDir:      a.standaloneRootDir,
+		StandaloneStartOptions: normalizeStandaloneStartOptions(a.standaloneStartOptions),
+		Token:                  a.token,
+		UserName:               a.userName,
+		UserInfo:               a.userInfo,
 	}
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
@@ -918,6 +1066,13 @@ func bundledWebBinaryName() string {
 		return "file-proxy-web.exe"
 	}
 	return "file-proxy-web"
+}
+
+func bundledStandaloneWebBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "file-proxy-web-standalone.exe"
+	}
+	return "file-proxy-web-standalone"
 }
 
 func removeQuarantineAttribute(path string) {
@@ -1004,12 +1159,19 @@ func extractBundledFileProxyWeb() (string, error) {
 	return extractBundledBinary(bundledWebBinaryName())
 }
 
+func extractBundledFileProxyWebStandalone() (string, error) {
+	return extractBundledBinary(bundledStandaloneWebBinaryName())
+}
+
 func extractBundledWorkers() (string, error) {
 	worker, err := extractBundledFileProxy()
 	if err != nil {
 		return "", err
 	}
 	if _, err := extractBundledFileProxyWeb(); err != nil {
+		return "", err
+	}
+	if _, err := extractBundledFileProxyWebStandalone(); err != nil {
 		return "", err
 	}
 	return worker, nil
@@ -1060,6 +1222,9 @@ func (a *App) waitProcess(name string, cmd *exec.Cmd) {
 	}
 	if a.webCmd == cmd {
 		a.webCmd = nil
+	}
+	if a.standaloneWebCmd == cmd {
+		a.standaloneWebCmd = nil
 	}
 	if err != nil {
 		a.lastError = err.Error()

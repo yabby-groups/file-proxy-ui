@@ -14,7 +14,7 @@ WORKER_CACHE_REFRESH="${WORKER_CACHE_REFRESH:-1}"
 UPDATE_WORKERS_ONLY="${UPDATE_WORKERS_ONLY:-0}"
 LOCAL_WORKER_BIN="${LOCAL_WORKER_BIN:-}"
 LOCAL_WORKER_BUNDLE="${LOCAL_WORKER_BUNDLE:-}"
-FILE_PROXY_VERSION="${FILE_PROXY_VERSION:-v1.2.0.0}"
+FILE_PROXY_VERSION="${FILE_PROXY_VERSION:-v1.2.1.0}"
 FILE_PROXY_RELEASE_BASE="${FILE_PROXY_RELEASE_BASE:-https://github.com/Lupino/file-proxy/releases/download}"
 WORKER_CACHE_DIR="${WORKER_CACHE_DIR:-$ROOT/.cache/file-proxy-workers/$FILE_PROXY_VERSION}"
 
@@ -78,6 +78,13 @@ web_binary_for_target() {
   esac
 }
 
+standalone_web_binary_for_target() {
+  case "$1" in
+    windows/*) printf 'bin/%s/file-proxy-web-standalone.exe' "$(target_slug "$1")" ;;
+    *) printf 'bin/%s/file-proxy-web-standalone' "$(target_slug "$1")" ;;
+  esac
+}
+
 worker_archive_for_target() {
   case "$1" in
     darwin/arm64) printf 'file-proxy-macos-aarch64-%s.tar.bz2' "$FILE_PROXY_VERSION" ;;
@@ -93,15 +100,18 @@ copy_local_worker_source() {
   local target_dir="bin/$(target_slug "$target")"
   local worker
   local web_worker
+  local standalone_web_worker
   local source_bin=""
   local source_web_bin=""
+  local source_standalone_web_bin=""
   local source_dir=""
 
   worker="$(worker_binary_for_target "$target")"
   web_worker="$(web_binary_for_target "$target")"
+  standalone_web_worker="$(standalone_web_binary_for_target "$target")"
   case "$target" in
-    windows/*) source_bin="file-proxy.exe"; source_web_bin="file-proxy-web.exe" ;;
-    *) source_bin="file-proxy"; source_web_bin="file-proxy-web" ;;
+    windows/*) source_bin="file-proxy.exe"; source_web_bin="file-proxy-web.exe"; source_standalone_web_bin="file-proxy-web-standalone.exe" ;;
+    *) source_bin="file-proxy"; source_web_bin="file-proxy-web"; source_standalone_web_bin="file-proxy-web-standalone" ;;
   esac
 
   mkdir -p "$target_dir"
@@ -112,8 +122,10 @@ copy_local_worker_source() {
     fi
     [[ -f "$source_dir/$source_bin" ]] || fail "local worker bundle missing $source_bin: $LOCAL_WORKER_BUNDLE"
     [[ -f "$source_dir/$source_web_bin" ]] || fail "local worker bundle missing $source_web_bin: $LOCAL_WORKER_BUNDLE"
+    [[ -f "$source_dir/$source_standalone_web_bin" ]] || fail "local worker bundle missing $source_standalone_web_bin: $LOCAL_WORKER_BUNDLE"
     install_file "$source_dir/$source_bin" "$worker"
     install_file "$source_dir/$source_web_bin" "$web_worker"
+    install_file "$source_dir/$source_standalone_web_bin" "$standalone_web_worker"
     if [[ "$target" == windows/* ]]; then
       copy_sibling_files "$source_dir" "$target_dir" "$source_bin"
     fi
@@ -125,12 +137,14 @@ copy_local_worker_source() {
   else
     [[ -f "$LOCAL_WORKER_BIN" ]] || fail "local worker binary not found: $LOCAL_WORKER_BIN"
     [[ -f "$(dirname "$LOCAL_WORKER_BIN")/$source_web_bin" ]] || fail "local file-proxy-web not found next to: $LOCAL_WORKER_BIN"
+    [[ -f "$(dirname "$LOCAL_WORKER_BIN")/$source_standalone_web_bin" ]] || fail "local file-proxy-web-standalone not found next to: $LOCAL_WORKER_BIN"
     install_file "$LOCAL_WORKER_BIN" "$worker"
     install_file "$(dirname "$LOCAL_WORKER_BIN")/$source_web_bin" "$web_worker"
+    install_file "$(dirname "$LOCAL_WORKER_BIN")/$source_standalone_web_bin" "$standalone_web_worker"
   fi
   case "$target" in
     windows/*) ;;
-    *) chmod 0755 "$worker" "$web_worker" ;;
+    *) chmod 0755 "$worker" "$web_worker" "$standalone_web_worker" ;;
   esac
   clear_quarantine "$target_dir"
 }
@@ -234,16 +248,20 @@ extract_worker_archive() {
     windows/*)
       [[ -f "$tmp_dir/file-proxy.exe" ]] || fail "file-proxy.exe not found in $archive"
       [[ -f "$tmp_dir/file-proxy-web.exe" ]] || fail "file-proxy-web.exe not found in $archive"
+      [[ -f "$tmp_dir/file-proxy-web-standalone.exe" ]] || fail "file-proxy-web-standalone.exe not found in $archive"
       install_file "$tmp_dir/file-proxy.exe" "$target_dir/file-proxy.exe"
       install_file "$tmp_dir/file-proxy-web.exe" "$target_dir/file-proxy-web.exe"
+      install_file "$tmp_dir/file-proxy-web-standalone.exe" "$target_dir/file-proxy-web-standalone.exe"
       copy_sibling_files "$tmp_dir" "$target_dir" "file-proxy.exe"
       ;;
     darwin/arm64)
       [[ -f "$tmp_dir/bin/file-proxy" ]] || fail "bin/file-proxy not found in $archive"
       [[ -f "$tmp_dir/bin/file-proxy-web" ]] || fail "bin/file-proxy-web not found in $archive"
+      [[ -f "$tmp_dir/bin/file-proxy-web-standalone" ]] || fail "bin/file-proxy-web-standalone not found in $archive"
       install_file "$tmp_dir/bin/file-proxy" "$target_dir/file-proxy"
       install_file "$tmp_dir/bin/file-proxy-web" "$target_dir/file-proxy-web"
-      chmod 0755 "$target_dir/file-proxy" "$target_dir/file-proxy-web"
+      install_file "$tmp_dir/bin/file-proxy-web-standalone" "$target_dir/file-proxy-web-standalone"
+      chmod 0755 "$target_dir/file-proxy" "$target_dir/file-proxy-web" "$target_dir/file-proxy-web-standalone"
       if [[ -d "$tmp_dir/lib/file-proxy" ]]; then
         rm -rf "$target_dir/lib"
         mkdir -p "$target_dir/lib"
@@ -254,9 +272,11 @@ extract_worker_archive() {
     linux/*)
       [[ -f "$tmp_dir/file-proxy" ]] || fail "file-proxy not found in $archive"
       [[ -f "$tmp_dir/file-proxy-web" ]] || fail "file-proxy-web not found in $archive"
+      [[ -f "$tmp_dir/file-proxy-web-standalone" ]] || fail "file-proxy-web-standalone not found in $archive"
       install_file "$tmp_dir/file-proxy" "$target_dir/file-proxy"
       install_file "$tmp_dir/file-proxy-web" "$target_dir/file-proxy-web"
-      chmod 0755 "$target_dir/file-proxy" "$target_dir/file-proxy-web"
+      install_file "$tmp_dir/file-proxy-web-standalone" "$target_dir/file-proxy-web-standalone"
+      chmod 0755 "$target_dir/file-proxy" "$target_dir/file-proxy-web" "$target_dir/file-proxy-web-standalone"
       ;;
     *)
       fail "no extraction rule for $target"
@@ -270,25 +290,27 @@ ensure_worker_binary() {
   local target="$1"
   local worker
   local web_worker
+  local standalone_web_worker
   local archive
 
   worker="$(worker_binary_for_target "$target")"
   web_worker="$(web_binary_for_target "$target")"
+  standalone_web_worker="$(standalone_web_binary_for_target "$target")"
   archive="$(worker_archive_for_target "$target")"
   if [[ -n "$LOCAL_WORKER_BIN" || -n "$LOCAL_WORKER_BUNDLE" ]]; then
     copy_local_worker_source "$target"
-    [[ -f "$worker" && -f "$web_worker" ]] || fail "expected local worker binaries not found after copy"
+    [[ -f "$worker" && -f "$web_worker" && -f "$standalone_web_worker" ]] || fail "expected local worker binaries not found after copy"
     return 0
   fi
 
   if [[ "$DOWNLOAD_WORKERS" == "1" && -n "$archive" ]]; then
     download_worker_archive "$target" "$archive"
     extract_worker_archive "$target" "$archive"
-    [[ -f "$worker" && -f "$web_worker" ]] || fail "expected worker binaries not found after extraction"
+    [[ -f "$worker" && -f "$web_worker" && -f "$standalone_web_worker" ]] || fail "expected worker binaries not found after extraction"
     return 0
   fi
 
-  if [[ -f "$worker" && -f "$web_worker" ]]; then
+  if [[ -f "$worker" && -f "$web_worker" && -f "$standalone_web_worker" ]]; then
     return 0
   fi
 
@@ -297,7 +319,7 @@ ensure_worker_binary() {
     return 1
   fi
   if [[ "$DOWNLOAD_WORKERS" != "1" ]]; then
-    printf 'skip: %s missing %s or %s and DOWNLOAD_WORKERS=%s\n' "$target" "$worker" "$web_worker" "$DOWNLOAD_WORKERS" >&2
+    printf 'skip: %s missing %s, %s, or %s and DOWNLOAD_WORKERS=%s\n' "$target" "$worker" "$web_worker" "$standalone_web_worker" "$DOWNLOAD_WORKERS" >&2
     return 1
   fi
 }
@@ -354,6 +376,7 @@ build_targets=()
 for target in $TARGETS; do
   worker="$(worker_binary_for_target "$target")"
   web_worker="$(web_binary_for_target "$target")"
+  standalone_web_worker="$(standalone_web_binary_for_target "$target")"
   if [[ "$UPDATE_WORKERS_ONLY" != "1" ]] && ! host_supports_target "$target" "$HOST_GOOS"; then
     if [[ "$SKIP_UNSUPPORTED" == "1" ]]; then
       printf 'skip: %s cannot be built on host GOOS=%s with Wails\n' "$target" "$HOST_GOOS" >&2
@@ -366,8 +389,8 @@ for target in $TARGETS; do
   if ! ensure_worker_binary "$target"; then
     continue
   fi
-  if [[ ! -f "$worker" || ! -f "$web_worker" ]]; then
-    missing+=("$target -> $worker, $web_worker")
+  if [[ ! -f "$worker" || ! -f "$web_worker" || ! -f "$standalone_web_worker" ]]; then
+    missing+=("$target -> $worker, $web_worker, $standalone_web_worker")
   else
     build_targets+=("$target")
   fi
@@ -396,7 +419,8 @@ if [[ "$UPDATE_WORKERS_ONLY" == "1" ]]; then
   for target in "${build_targets[@]}"; do
     worker="$(worker_binary_for_target "$target")"
     web_worker="$(web_binary_for_target "$target")"
-    printf 'worker: %s\nweb: %s\n' "$worker" "$web_worker"
+    standalone_web_worker="$(standalone_web_binary_for_target "$target")"
+    printf 'worker: %s\nweb: %s\nstandalone web: %s\n' "$worker" "$web_worker" "$standalone_web_worker"
   done
   exit 0
 fi
