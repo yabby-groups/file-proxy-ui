@@ -5,12 +5,10 @@ import {
   ExternalLink,
   FolderOpen,
   Languages,
-  ListChecks,
   LogIn,
   LogOut,
   Play,
   Settings,
-  ShieldCheck,
   Square,
 } from "lucide-react";
 import {
@@ -448,6 +446,7 @@ function App() {
                     <label>
                       {t("threads")}
                       <input
+                        className="shortNumberInput"
                         type="number"
                         min="1"
                         max="16"
@@ -699,31 +698,9 @@ function ServicePanel({ icon, title, running, t, service, children }) {
 function ServiceIntro({ service, t }) {
   return (
     <section className="serviceIntro">
-      <p className="serviceSummary">{t(`${service}Summary`)}</p>
-      <div className="serviceInfoGrid">
-        <div>
-          <h3>{t("howItWorks")}</h3>
-          <p>{t(`${service}Flow`)}</p>
-        </div>
-        <div>
-          <h3>
-            <ShieldCheck size={15} />
-            {t("securityNotes")}
-          </h3>
-          <p>{t(`${service}Safety`)}</p>
-        </div>
-      </div>
-      <div className="serviceSteps">
-        <h3>
-          <ListChecks size={16} />
-          {t("serviceOverview")}
-        </h3>
-        <ol>
-          {t(`${service}Steps`).map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      </div>
+      <p className="serviceSummary">
+        {t(`${service}Summary`)} <span>{t(`${service}Flow`)}</span>
+      </p>
     </section>
   );
 }
