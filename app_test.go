@@ -565,6 +565,33 @@ func TestLogoutStopsRunningWorker(t *testing.T) {
 	t.Fatal("expected logout to stop running worker")
 }
 
+func TestStopFileProxyReturnsStoppedStatusImmediately(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess", "--")
+	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start helper process: %v", err)
+	}
+	defer func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+	}()
+
+	app := NewApp()
+	app.mu.Lock()
+	app.cmd = cmd
+	app.mu.Unlock()
+	go app.waitProcess("file-proxy", cmd)
+
+	status, err := app.StopFileProxy()
+	if err != nil {
+		t.Fatalf("StopFileProxy returned error: %v", err)
+	}
+	if status.Running {
+		t.Fatal("expected StopFileProxy to return a stopped status")
+	}
+}
+
 func TestStopAllStopsStandaloneWeb(t *testing.T) {
 	cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess", "--")
 	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")

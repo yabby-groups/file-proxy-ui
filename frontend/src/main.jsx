@@ -47,7 +47,7 @@ const translations = {
     account: "Account",
     worker: "File Service",
     client: "Client",
-    standalone: "Standalone Web",
+    standalone: "Standalone File Service",
     root: "Root directory",
     selectDirectory: "Select directory",
     threads: "Worker threads",
@@ -75,10 +75,10 @@ const translations = {
     stopWorkerTask: "stop file service",
     startClientTask: "start client",
     stopClientTask: "stop client",
-    startStandaloneTask: "start standalone web",
-    stopStandaloneTask: "stop standalone web",
+    startStandaloneTask: "start standalone file service",
+    stopStandaloneTask: "stop standalone file service",
     openWebTask: "open web address",
-    openStandaloneTask: "open standalone web address",
+    openStandaloneTask: "open standalone file service address",
     saveSettingsTask: "save settings",
     serviceOverview: "Overview",
     howItWorks: "How it works",
@@ -106,8 +106,7 @@ const translations = {
       "Start the file service if it is not running.",
       "Choose a local port and start the browser gateway.",
     ],
-    standaloneSummary:
-      "Browse and manage a local folder directly in your browser.",
+    standaloneSummary: "Serve and manage a local folder directly from this computer.",
     standaloneFlow:
       "This mode serves the selected folder without an account, certificates, or a running file service.",
     standaloneSafety:
@@ -132,7 +131,7 @@ const translations = {
     account: "账户",
     worker: "文件服务",
     client: "客户端",
-    standalone: "单机 Web",
+    standalone: "单机文件服务",
     root: "根目录",
     selectDirectory: "选择目录",
     threads: "工作线程数",
@@ -160,10 +159,10 @@ const translations = {
     stopWorkerTask: "停止文件服务",
     startClientTask: "启动客户端",
     stopClientTask: "停止客户端",
-    startStandaloneTask: "启动单机 Web",
-    stopStandaloneTask: "停止单机 Web",
+    startStandaloneTask: "启动单机文件服务",
+    stopStandaloneTask: "停止单机文件服务",
     openWebTask: "打开访问地址",
-    openStandaloneTask: "打开单机 Web 地址",
+    openStandaloneTask: "打开单机文件服务地址",
     saveSettingsTask: "保存设置",
     serviceOverview: "服务说明",
     howItWorks: "工作方式",
@@ -188,7 +187,7 @@ const translations = {
       "确认文件服务已经启动。",
       "选择本机端口后启动浏览器入口。",
     ],
-    standaloneSummary: "直接在浏览器中管理一个本机目录。",
+    standaloneSummary: "在本机直接提供并管理一个目录。",
     standaloneFlow: "此模式不需要账户、证书或正在运行的文件服务。",
     standaloneSafety:
       "浏览器入口仅监听 localhost。只应为允许修改的目录开启删除权限。",
@@ -241,6 +240,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [dismissedToast, setDismissedToast] = useState("");
   const t = useCallback(
     (key) => translations[language][key] || translations.en[key] || key,
     [language],
@@ -267,6 +267,16 @@ function App() {
     () => window.localStorage.setItem("myna-file-proxy-language", language),
     [language],
   );
+  const toastMessage = error || status.last_error;
+  useEffect(() => {
+    if (!toastMessage) {
+      setDismissedToast("");
+      return undefined;
+    }
+    setDismissedToast("");
+    const timer = window.setTimeout(() => setDismissedToast(toastMessage), 5000);
+    return () => window.clearTimeout(timer);
+  }, [toastMessage]);
 
   const run = useCallback(
     async (label, fn) => {
@@ -435,69 +445,68 @@ function App() {
                     ? t("workerAlreadyRunning")
                     : t("singleWorker")}
                 </div>
-                <section className="setupSection">
-                  <h3>{t("setup")}</h3>
-                  <StatusRow
-                    label={t("root")}
-                    ready={!!status.root_dir}
-                    value={status.root_dir || t("selectDirectory")}
-                  />
-                  <div className="fieldGrid">
-                    <label>
-                      {t("threads")}
-                      <input
-                        className="shortNumberInput"
-                        type="number"
-                        min="1"
-                        max="16"
-                        value={thread}
-                        onChange={(event) =>
-                          setThread(Number(event.target.value || 4))
-                        }
-                      />
-                    </label>
-                    <label className="checkLine">
-                      <input
-                        type="checkbox"
-                        checked={allowDelete}
-                        onChange={(event) =>
-                          setAllowDelete(event.target.checked)
-                        }
-                      />
-                      {t("allowDelete")}
-                    </label>
-                  </div>
-                </section>
-                <div className="buttonRow serviceActions">
-                  <button
-                    className="iconButton"
-                    type="button"
-                    disabled={!!busy || status.running}
-                    onClick={() => run(t("selectTask"), SelectRootDirectory)}
-                    title={t("selectDirectory")}
-                  >
-                    <FolderOpen size={18} />
-                  </button>
-                  <button
-                    className="primary"
-                    type="button"
-                    disabled={!status.root_dir || status.running || !!busy}
-                    onClick={() =>
-                      run(t("startWorkerTask"), () => StartFileProxy(options))
-                    }
-                  >
-                    <Play size={18} />
-                    {t("start")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!status.running || !!busy}
-                    onClick={() => run(t("stopWorkerTask"), StopFileProxy)}
-                  >
-                    <Square size={18} />
-                    {t("stop")}
-                  </button>
-                </div>
+                <ServiceControlLayout
+                  action={
+                    <ServiceToggleButton
+                      running={status.running}
+                      busy={busy}
+                      startDisabled={!status.root_dir}
+                      t={t}
+                      onStart={() =>
+                        run(t("startWorkerTask"), () => StartFileProxy(options))
+                      }
+                      onStop={() => run(t("stopWorkerTask"), StopFileProxy)}
+                    />
+                  }
+                >
+                  <section className="setupSection">
+                    <StatusRow
+                      label={t("root")}
+                      ready={!!status.root_dir}
+                      value={status.root_dir || t("selectDirectory")}
+                      action={
+                        <button
+                          className="iconButton"
+                          type="button"
+                          disabled={!!busy || status.running}
+                          onClick={() =>
+                            run(t("selectTask"), SelectRootDirectory)
+                          }
+                          title={t("selectDirectory")}
+                        >
+                          <FolderOpen size={18} />
+                        </button>
+                      }
+                    />
+                    <div className="fieldGrid">
+                      <label className="checkLine permissionField">
+                        <input
+                          type="checkbox"
+                          checked={allowDelete}
+                          onChange={(event) =>
+                            setAllowDelete(event.target.checked)
+                          }
+                          disabled={status.running}
+                        />
+                        {t("allowDelete")}
+                      </label>
+                      <label className="inlineNumberField">
+                        {t("threads")}
+                        <input
+                          className="shortNumberInput"
+                          type="number"
+                          min="1"
+                          max="16"
+                          value={thread}
+                          onChange={(event) =>
+                            setThread(Number(event.target.value || 4))
+                          }
+                          disabled={status.running}
+                        />
+                      </label>
+                    </div>
+                  </section>
+                </ServiceControlLayout>
               </>
             ) : (
               <LoginCard
@@ -525,33 +534,26 @@ function App() {
           >
             <ServiceIntro service="client" t={t} />
             {status.logged_in ? (
-              <>
-                <section className="setupSection">
-                  <h3>{t("setup")}</h3>
-                  <WebControls
-                    running={status.web_running}
-                    url={status.web_url}
-                    port={port}
-                    setPort={setPort}
-                    autoOpenBrowser={autoOpenBrowser}
-                    setAutoOpenBrowser={setAutoOpenBrowser}
-                    busy={busy}
-                    t={t}
-                    onOpen={() => run(t("openWebTask"), OpenWebURL)}
-                    onCopy={() =>
-                      ClipboardSetText(status.web_url).catch((err) =>
-                        setError(String(err)),
-                      )
-                    }
-                    onStart={() =>
-                      run(t("startClientTask"), () =>
-                        StartFileProxyWeb(options),
-                      )
-                    }
-                    onStop={() => run(t("stopClientTask"), StopFileProxyWeb)}
-                  />
-                </section>
-              </>
+              <WebControls
+                running={status.web_running}
+                url={status.web_url}
+                port={port}
+                setPort={setPort}
+                autoOpenBrowser={autoOpenBrowser}
+                setAutoOpenBrowser={setAutoOpenBrowser}
+                busy={busy}
+                t={t}
+                onOpen={() => run(t("openWebTask"), OpenWebURL)}
+                onCopy={() =>
+                  ClipboardSetText(status.web_url).catch((err) =>
+                    setError(String(err)),
+                  )
+                }
+                onStart={() =>
+                  run(t("startClientTask"), () => StartFileProxyWeb(options))
+                }
+                onStop={() => run(t("stopClientTask"), StopFileProxyWeb)}
+              />
             ) : (
               <LoginCard
                 t={t}
@@ -577,40 +579,7 @@ function App() {
             service="standalone"
           >
             <ServiceIntro service="standalone" t={t} />
-            <section className="setupSection">
-              <h3>{t("setup")}</h3>
-              <StatusRow
-                label={t("root")}
-                ready={!!status.standalone_root_dir}
-                value={status.standalone_root_dir || t("selectDirectory")}
-              />
-              <div className="fieldGrid">
-                <label>
-                  {t("port")}
-                  <input
-                    type="number"
-                    min="1"
-                    max="65535"
-                    value={standalonePort}
-                    onChange={(event) =>
-                      setStandalonePort(Number(event.target.value || 8081))
-                    }
-                    disabled={status.standalone_web_running}
-                  />
-                </label>
-                <label className="checkLine">
-                  <input
-                    type="checkbox"
-                    checked={standaloneAllowDelete}
-                    onChange={(event) =>
-                      setStandaloneAllowDelete(event.target.checked)
-                    }
-                    disabled={status.standalone_web_running}
-                  />
-                  {t("allowDelete")}
-                </label>
-              </div>
-              <WebControls
+            <WebControls
                 running={status.standalone_web_running}
                 url={status.standalone_web_url}
                 port={standalonePort}
@@ -619,7 +588,6 @@ function App() {
                 setAutoOpenBrowser={setStandaloneAutoOpenBrowser}
                 busy={busy}
                 t={t}
-                hidePort
                 onOpen={() =>
                   run(t("openStandaloneTask"), OpenStandaloneWebURL)
                 }
@@ -636,25 +604,43 @@ function App() {
                 onStop={() =>
                   run(t("stopStandaloneTask"), StopFileProxyWebStandalone)
                 }
-                beforeStart={
-                  <button
-                    className="iconButton"
-                    type="button"
-                    disabled={!!busy || status.standalone_web_running}
-                    onClick={() =>
-                      run(
-                        t("selectStandaloneTask"),
-                        SelectStandaloneRootDirectory,
-                      )
-                    }
-                    title={t("selectDirectory")}
-                  >
-                    <FolderOpen size={18} />
-                  </button>
-                }
                 startDisabled={!status.standalone_root_dir}
-              />
-            </section>
+              >
+                <StatusRow
+                  label={t("root")}
+                  ready={!!status.standalone_root_dir}
+                  value={status.standalone_root_dir || t("selectDirectory")}
+                  action={
+                    <button
+                      className="iconButton"
+                      type="button"
+                      disabled={!!busy || status.standalone_web_running}
+                      onClick={() =>
+                        run(
+                          t("selectStandaloneTask"),
+                          SelectStandaloneRootDirectory,
+                        )
+                      }
+                      title={t("selectDirectory")}
+                    >
+                      <FolderOpen size={18} />
+                    </button>
+                  }
+                />
+                <div className="fieldGrid">
+                  <label className="checkLine permissionField">
+                    <input
+                      type="checkbox"
+                      checked={standaloneAllowDelete}
+                      onChange={(event) =>
+                        setStandaloneAllowDelete(event.target.checked)
+                      }
+                      disabled={status.standalone_web_running}
+                    />
+                    {t("allowDelete")}
+                  </label>
+                </div>
+              </WebControls>
           </ServicePanel>
         )}
       </section>
@@ -672,9 +658,18 @@ function App() {
         </div>
         <pre>{(status.logs || []).join("\n") || t("noLogs")}</pre>
       </section>
-      {(error || status.last_error || busy) && (
-        <div className={error || status.last_error ? "notice error" : "notice"}>
-          {busy ? `${t("working")}: ${busy}` : error || status.last_error}
+      {busy && (
+        <div
+          className="toast"
+          role="status"
+          aria-live="polite"
+        >
+          {`${t("working")}: ${busy}`}
+        </div>
+      )}
+      {!busy && toastMessage && dismissedToast !== toastMessage && (
+        <div className="toast error" role="alert" aria-live="polite">
+          {toastMessage}
         </div>
       )}
     </main>
@@ -773,7 +768,38 @@ function LoginCard({
     </form>
   );
 }
+function ServiceControlLayout({ children, action }) {
+  return (
+    <div className="serviceControlLayout">
+      <div className="serviceControlFields">{children}</div>
+      <div className="buttonRow serviceActions">{action}</div>
+    </div>
+  );
+}
+
+function ServiceToggleButton({
+  running,
+  busy,
+  startDisabled,
+  t,
+  onStart,
+  onStop,
+}) {
+  return (
+    <button
+      className={running ? "primary stopAction" : "primary startAction"}
+      type="button"
+      disabled={!!busy || (!running && startDisabled)}
+      onClick={running ? onStop : onStart}
+    >
+      {running ? <Square size={18} /> : <Play size={18} />}
+      {running ? t("stop") : t("start")}
+    </button>
+  );
+}
+
 function WebControls({
+  children,
   running,
   url,
   port,
@@ -786,73 +812,69 @@ function WebControls({
   onCopy,
   onStart,
   onStop,
-  beforeStart,
   startDisabled,
-  hidePort = false,
 }) {
   return (
-    <>
-      <div className="statusRow">
-        <span className={running ? "dot ready" : "dot"} />
-        <span className="statusLabel">{t("browserAddress")}</span>
-        <button
-          className="addressLink"
-          type="button"
-          disabled={!running || !!busy}
-          onClick={onOpen}
-          title={t("openWebAddress")}
-        >
-          {url || t("startsOnLocalhost")}
-        </button>
-      </div>
-      {!hidePort && (
-        <label>
-          {t("port")}
-          <input
-            type="number"
-            min="1"
-            max="65535"
-            value={port}
-            onChange={(event) => setPort(Number(event.target.value || 8080))}
-            disabled={running}
-          />
-        </label>
-      )}
-      <label className="checkLine">
-        <input
-          type="checkbox"
-          checked={autoOpenBrowser}
-          onChange={(event) => setAutoOpenBrowser(event.target.checked)}
-          disabled={running}
+    <ServiceControlLayout
+      action={
+        <ServiceToggleButton
+          running={running}
+          busy={busy}
+          startDisabled={startDisabled}
+          t={t}
+          onStart={onStart}
+          onStop={onStop}
         />
-        {t("autoOpenBrowser")}
-      </label>
-      <div className="buttonRow serviceActions">
-        {beforeStart}
-        <button
-          className="iconButton"
-          type="button"
-          disabled={!running || !!busy}
-          onClick={onCopy}
-          title={t("copyWebAddress")}
-        >
-          <Copy size={18} />
-        </button>
-        <button
-          className="primary"
-          type="button"
-          disabled={running || !!busy || startDisabled}
-          onClick={onStart}
-        >
-          <Play size={18} />
-          {t("start")}
-        </button>
-        <button type="button" disabled={!running || !!busy} onClick={onStop}>
-          <Square size={18} />
-          {t("stop")}
-        </button>
-      </div>
-    </>
+      }
+    >
+      <section className="setupSection">
+        {children}
+        <div className="statusRow">
+          <span className={running ? "dot ready" : "dot"} />
+          <span className="statusLabel">{t("browserAddress")}</span>
+          <button
+            className="addressLink"
+            type="button"
+            disabled={!running || !!busy}
+            onClick={onOpen}
+            title={t("openWebAddress")}
+          >
+            {url || t("startsOnLocalhost")}
+          </button>
+          <button
+            className="iconButton"
+            type="button"
+            disabled={!running || !!busy}
+            onClick={onCopy}
+            title={t("copyWebAddress")}
+          >
+            <Copy size={18} />
+          </button>
+        </div>
+        <div className="fieldGrid webControlFields">
+          <label className="checkLine fullWidthField">
+            <input
+              type="checkbox"
+              checked={autoOpenBrowser}
+              onChange={(event) => setAutoOpenBrowser(event.target.checked)}
+              disabled={running}
+            />
+            {t("autoOpenBrowser")}
+          </label>
+          <label className="inlineNumberField">
+            {t("port")}
+            <input
+              type="number"
+              min="1"
+              max="65535"
+              value={port}
+              onChange={(event) => setPort(Number(event.target.value || 8080))}
+              disabled={running}
+            />
+          </label>
+        </div>
+      </section>
+    </ServiceControlLayout>
   );
 }
 
@@ -911,12 +933,13 @@ function SettingsPanel({
     </section>
   );
 }
-function StatusRow({ label, ready, value }) {
+function StatusRow({ label, ready, value, action }) {
   return (
     <div className="statusRow">
       <span className={ready ? "dot ready" : "dot"} />
       <span className="statusLabel">{label}</span>
       <span className="statusValue">{value}</span>
+      {action}
     </div>
   );
 }

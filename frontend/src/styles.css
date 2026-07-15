@@ -303,6 +303,15 @@ button:disabled {
   background: #0d5c4f;
 }
 
+.stopAction {
+  border-color: #d92d20;
+  background: #d92d20;
+}
+
+.stopAction:hover:not(:disabled) {
+  background: #b42318;
+}
+
 .iconButton {
   width: 38px;
   padding: 0;
@@ -478,9 +487,21 @@ button:disabled {
   display: none;
 }
 
+.serviceControlLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 176px;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.serviceControlFields {
+  min-width: 0;
+}
+
 .fieldGrid {
   display: flex;
   align-items: end;
+  flex-wrap: wrap;
   gap: 16px;
 }
 
@@ -492,19 +513,37 @@ button:disabled {
   margin-bottom: 3px;
 }
 
+.permissionField,
+.fullWidthField {
+  flex: 0 0 100%;
+}
+
 .setupSection > .statusRow {
   flex: 0 0 100%;
   max-width: 720px;
 }
 
-.fieldGrid > label:first-child {
+.inlineNumberField {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.inlineNumberField input {
   width: 112px;
 }
 
 .serviceActions {
-  margin-top: 4px;
-  padding-top: 0 !important;
-  justify-content: flex-start;
+  align-self: stretch;
+  margin: 0;
+  padding: 0 !important;
+}
+
+.serviceActions .primary {
+  flex: 1 1 auto;
+  min-height: 100%;
 }
 
 .loginPrompt {
@@ -619,7 +658,7 @@ button:disabled {
 
 .statusRow {
   display: grid;
-  grid-template-columns: 12px 78px minmax(0, 1fr);
+  grid-template-columns: 12px 78px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-height: 30px;
@@ -705,18 +744,22 @@ button:disabled {
   color: #667085;
 }
 
-.notice {
-  flex: 0 0 auto;
-  margin-top: 14px;
+.toast {
+  position: fixed;
+  z-index: 10;
+  top: 20px;
+  right: 20px;
+  max-width: min(420px, calc(100vw - 40px));
   border: 1px solid #b7d7cc;
   border-radius: 8px;
   padding: 10px 12px;
   color: #0d5c4f;
   background: #eef8f4;
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.16);
   font-size: 13px;
 }
 
-.notice.error {
+.toast.error {
   border-color: #f7b6ad;
   color: #9f2a1f;
   background: #fff1ef;
@@ -777,5 +820,13 @@ pre {
   .serviceSteps ol {
     grid-template-columns: 1fr;
     gap: 5px;
+  }
+
+  .serviceControlLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .serviceActions .primary {
+    min-height: 52px;
   }
 }

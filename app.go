@@ -380,7 +380,7 @@ func (a *App) SelectRootDirectory() (AppStatus, error) {
 
 func (a *App) SelectStandaloneRootDirectory() (AppStatus, error) {
 	dir, err := wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
-		Title: "Select standalone web root directory",
+		Title: "Select standalone file service root directory",
 	})
 	if err != nil {
 		return a.Status(), err
@@ -657,21 +657,45 @@ func (a *App) StopFileProxy() (AppStatus, error) {
 	a.mu.Lock()
 	cmd := a.cmd
 	a.mu.Unlock()
-	return a.Status(), stopCommand(cmd)
+	if err := stopCommand(cmd); err != nil {
+		return a.Status(), err
+	}
+	a.mu.Lock()
+	if a.cmd == cmd {
+		a.cmd = nil
+	}
+	a.mu.Unlock()
+	return a.Status(), nil
 }
 
 func (a *App) StopFileProxyWeb() (AppStatus, error) {
 	a.mu.Lock()
 	cmd := a.webCmd
 	a.mu.Unlock()
-	return a.Status(), stopCommand(cmd)
+	if err := stopCommand(cmd); err != nil {
+		return a.Status(), err
+	}
+	a.mu.Lock()
+	if a.webCmd == cmd {
+		a.webCmd = nil
+	}
+	a.mu.Unlock()
+	return a.Status(), nil
 }
 
 func (a *App) StopFileProxyWebStandalone() (AppStatus, error) {
 	a.mu.Lock()
 	cmd := a.standaloneWebCmd
 	a.mu.Unlock()
-	return a.Status(), stopCommand(cmd)
+	if err := stopCommand(cmd); err != nil {
+		return a.Status(), err
+	}
+	a.mu.Lock()
+	if a.standaloneWebCmd == cmd {
+		a.standaloneWebCmd = nil
+	}
+	a.mu.Unlock()
+	return a.Status(), nil
 }
 
 func (a *App) OpenWebURL() (AppStatus, error) {
