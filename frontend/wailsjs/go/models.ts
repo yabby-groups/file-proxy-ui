@@ -21,11 +21,11 @@ export namespace main {
 	    allow_delete: boolean;
 	    port: number;
 	    auto_open_browser: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new StartOptions(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.thread = source["thread"];
@@ -37,11 +37,11 @@ export namespace main {
 	export class CertificatePaths {
 	    server_public_path: string;
 	    client_private_path: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CertificatePaths(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.server_public_path = source["server_public_path"];
@@ -59,11 +59,11 @@ export namespace main {
 	    env_text: string;
 	    created_at: number;
 	    updated_at: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new PeriodicConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.uid = source["uid"];
@@ -82,11 +82,11 @@ export namespace main {
 	    name: string;
 	    nick_name: string;
 	    avatar_url: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new UserInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -113,11 +113,11 @@ export namespace main {
 	    last_error: string;
 	    logs: string[];
 	    binary_target: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AppStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.api_base_url = source["api_base_url"];
@@ -139,7 +139,7 @@ export namespace main {
 	        this.logs = source["logs"];
 	        this.binary_target = source["binary_target"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -158,8 +158,10 @@ export namespace main {
 		    return a;
 		}
 	}
-	
-	
-	
+
+
+
+
 
 }
+
