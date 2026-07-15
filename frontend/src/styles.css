@@ -11,8 +11,7 @@ html,
 body,
 #root {
   width: 100%;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
 }
 
 * {
@@ -32,8 +31,7 @@ input {
 .shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
   padding: 22px;
 }
 
@@ -402,16 +400,14 @@ button:disabled {
 }
 
 .loginCard {
-  width: min(420px, 100%);
-  padding: 20px;
-  border: 1px solid #d7dee9;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.08);
+  margin-top: 16px;
+  border-top: 1px solid #e4e9f1;
+  padding-top: 16px;
 }
 
 .loginCard .primary {
-  margin-top: 4px;
+  width: auto;
+  margin-top: 2px;
 }
 
 .overviewGrid {
@@ -428,6 +424,7 @@ button:disabled {
 .serviceOverview {
   display: flex;
   flex-direction: column;
+  padding: 20px;
 }
 
 .serviceOverview .statusRow {
@@ -435,8 +432,135 @@ button:disabled {
 }
 
 .serviceOverview .buttonRow {
-  margin-top: auto;
-  padding-top: 12px;
+  padding-top: 4px;
+}
+
+.serviceIntro {
+  display: grid;
+  gap: 14px;
+}
+
+.serviceSummary {
+  max-width: 760px;
+  color: #344054;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.serviceInfoGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.serviceInfoGrid > div,
+.serviceSteps {
+  border: 1px solid #e4e9f1;
+  border-radius: 6px;
+  padding: 12px 14px;
+  background: #f8fafc;
+}
+
+.serviceIntro h3,
+.setupSection h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 6px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.serviceIntro p {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.serviceSteps {
+  border-left: 3px solid #13715f;
+  background: #f4faf7;
+}
+
+.serviceSteps ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.setupSection {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  border-top: 1px solid #e4e9f1;
+  padding-top: 16px;
+}
+
+.setupSection h3 {
+  margin-bottom: 0;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.45fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 14px;
+}
+
+.fieldGrid label {
+  margin-bottom: 0;
+}
+
+.fieldGrid .checkLine {
+  margin-bottom: 3px;
+}
+
+.serviceActions {
+  border-top: 1px solid #e4e9f1;
+  margin-top: 16px;
+  padding-top: 16px !important;
+}
+
+.loginPrompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #475467;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.loginPrompt svg {
+  color: #13715f;
+}
+
+.loginFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.loginFields label {
+  margin-bottom: 0;
+}
+
+.loginFields label:has(small) {
+  grid-column: 1 / -1;
+}
+
+.loginFields small {
+  color: #667085;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .workerLimit {
@@ -622,8 +746,7 @@ button:disabled {
 
 .logPanel {
   display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
+  min-height: 180px;
   flex-direction: column;
   margin-top: 14px;
 }
@@ -648,8 +771,8 @@ button:disabled {
 }
 
 pre {
-  min-height: 0;
-  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: 280px;
   margin: 0;
   overflow: auto;
   border-radius: 6px;
@@ -658,4 +781,16 @@ pre {
   background: #152033;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .serviceInfoGrid,
+  .loginFields {
+    grid-template-columns: 1fr;
+  }
+
+  .serviceSteps ol {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
 }
