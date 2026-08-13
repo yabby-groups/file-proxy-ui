@@ -3,7 +3,7 @@
 Wails desktop GUI for starting bundled `file-proxy`, `file-proxy-web`, and
 `file-proxy-web-standalone` binaries.
 
-The app logs into `https://iot.huabot.com`, creates or fetches the current
+The app logs into `https://huabot.com`, creates or fetches the current
 user's sandbox workspace config, downloads the certificate bundle,
 asks the user to select a local root directory, and starts each service independently.
 The managed web gateway listens on `127.0.0.1` and provides a browser UI for a

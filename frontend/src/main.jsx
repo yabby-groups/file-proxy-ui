@@ -206,7 +206,7 @@ const translations = {
 };
 
 const emptyStatus = {
-  api_base_url: "https://iot.huabot.com",
+  api_base_url: "https://huabot.com",
   logged_in: false,
   root_dir: "",
   start_options: null,

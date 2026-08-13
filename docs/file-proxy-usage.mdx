@@ -1,0 +1,133 @@
+---
+title: Myna File Proxy Usage Guide
+description: Run managed and standalone local file services with the Myna File Proxy desktop app.
+---
+
+# Myna File Proxy
+
+Myna File Proxy is a Wails desktop application that manages three bundled
+services. Use the managed services to connect one local directory to the
+signed-in Myna workspace. Use the standalone service when the files should
+stay entirely local and be accessed through a browser on the same computer.
+
+## Choose a service
+
+| Service                     | Sign-in      | What it does                                                                 | Default local address    |
+| --------------------------- | ------------ | ---------------------------------------------------------------------------- | ------------------------ |
+| **File Service**            | Required     | Starts the `file-proxy` worker for one selected directory.                   | None                     |
+| **Client**                  | Required     | Starts `file-proxy-web`, a local browser gateway to the managed worker.      | `http://127.0.0.1:8080/` |
+| **Standalone File Service** | Not required | Starts `file-proxy-web-standalone` to serve one selected directory directly. | `http://127.0.0.1:8081/` |
+
+The File Service and Client use the workspace configuration and certificate
+bundle obtained after sign-in. The Standalone File Service does not use an
+account, certificate, or a running File Service.
+
+## Before You Start
+
+1. Install a release of Myna File Proxy for the current platform.
+2. Choose a dedicated directory for each service. A selected directory is the
+   service root, so files below it can be exposed to that service.
+3. Keep **Allow file deletion** disabled unless the browser user should be able
+   to delete files in that root.
+
+The desktop application stores its settings, including the sign-in token, in
+the operating system configuration directory with owner-only file permissions.
+Treat the computer and local browser profile as trusted when a service runs.
+
+## Managed File Service
+
+Use this mode when a local directory must be available through the authenticated
+Myna workspace.
+
+1. Open **Settings** and verify the API domain. The default is
+   `https://huabot.com`.
+2. Sign in with the account credentials. Provide the six-digit authenticator
+   code when prompted.
+3. Open the **File Service** tab and select the root directory.
+4. Set the worker thread count. The app accepts `1` through `16` and defaults
+   to `4`.
+5. Decide whether file deletion should be allowed, then select **Start
+   service**.
+
+After sign-in, the application creates or retrieves the workspace configuration
+and downloads the certificate bundle as needed. It starts the bundled worker
+with the selected root, thread count, workspace connection details, and the
+deletion setting.
+
+Only one managed File Service can run in the desktop application at a time.
+Use **Stop service** before changing its root or starting a replacement.
+
+## Managed Browser Client
+
+The Client provides the browser interface for the managed File Service.
+
+1. Sign in and start the **File Service**.
+2. Open the **Client** tab.
+3. Choose a port from `1` through `65535`; the default is `8080`.
+4. Optionally enable **Open browser when ready**.
+5. Select **Start service**. Use the displayed address or **Open local
+   address** to open the client.
+
+The Client always listens on `127.0.0.1`, not on a LAN interface. Other devices
+cannot reach it unless you deliberately add a separate forwarding mechanism.
+Stopping the Client closes only the local browser gateway. Stopping the File
+Service stops only its worker; start both services again when needed.
+
+## Standalone Browser Service
+
+Use the Standalone File Service to browse and manage one local directory
+directly, without a Myna account.
+
+1. Open the **Standalone File Service** tab.
+2. Select the directory to serve.
+3. Choose a port from `1` through `65535`; the default is `8081`.
+4. Enable deletion only when modifications to that directory are intended.
+5. Select **Start service**, then open the displayed local address.
+
+The standalone service also binds to `127.0.0.1`. It is independent of the
+managed worker and Client, so its directory and port can be configured
+separately.
+
+## Operations
+
+- The status indicator shows whether each service is running.
+- The log panel collects the latest 300 process messages. **Clear logs**
+  removes only this in-memory history; it does not stop a service or delete
+  files.
+- A service can be stopped from its own tab. Logging out stops all three
+  managed processes before removing the saved sign-in state.
+- If a port is already occupied or a worker exits, inspect the log panel for
+  its error and choose another available port or correct the reported setup
+  issue.
+
+## Safety Checklist
+
+- Select the narrowest practical root directory. Do not choose a home directory
+  or a directory containing unrelated private material.
+- Leave deletion disabled for read-only sharing and for unfamiliar browser
+  users.
+- Do not expose `127.0.0.1` through a tunnel or reverse proxy unless access
+  controls and the resulting data exposure have been reviewed.
+- Stop services when they are no longer needed, especially before sharing the
+  computer or switching accounts.
+
+## Development and Bundled Workers
+
+The desktop app embeds platform-specific `file-proxy`, `file-proxy-web`, and
+`file-proxy-web-standalone` executables from `bin/<os>-<arch>/`. Refresh the
+current macOS Apple Silicon workers before Wails development:
+
+```bash
+UPDATE_WORKERS_ONLY=1 TARGETS=darwin/arm64 ./scripts/build_all.sh
+```
+
+Then install frontend dependencies, build the interface, and launch Wails:
+
+```bash
+npm install --prefix frontend
+npm run build --prefix frontend
+wails dev
+```
+
+For other targets and local worker overrides, see the repository
+[`README.md`](../README.md).

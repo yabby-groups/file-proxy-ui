@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	defaultAPIBaseURL        = "https://iot.huabot.com"
+	defaultAPIBaseURL        = "https://huabot.com"
 	defaultThread            = 4
 	maxThread                = 16
 	defaultWebPort           = 8080

@@ -533,8 +533,8 @@ func TestSetAPIBaseURLPersistsAndClearsLoginState(t *testing.T) {
 
 func TestNormalizeAPIBaseURL(t *testing.T) {
 	cases := map[string]string{
-		"iot.huabot.com":             "https://iot.huabot.com",
-		"https://iot.huabot.com/":    "https://iot.huabot.com",
+		"huabot.com":                 "https://huabot.com",
+		"https://huabot.com/":        "https://huabot.com",
 		"http://localhost:8080/api/": "http://localhost:8080",
 	}
 	for input, expected := range cases {
