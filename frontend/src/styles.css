@@ -423,14 +423,19 @@ button:disabled {
 }
 
 .loginCard {
-  margin-top: 16px;
+  display: grid;
+  max-width: 880px;
+  margin-top: 18px;
   border-top: 1px solid #e4e9f1;
-  padding-top: 16px;
+  padding-top: 20px;
 }
 
 .loginCard .primary {
-  width: auto;
-  margin-top: 2px;
+  width: fit-content;
+  min-width: 154px;
+  min-height: 42px;
+  margin-top: 16px;
+  padding: 0 18px;
 }
 
 .overviewGrid {
@@ -546,28 +551,49 @@ button:disabled {
   min-height: 100%;
 }
 
-.loginPrompt {
+.loginIntro {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  color: #475467;
-  font-size: 13px;
-  font-weight: 650;
+  gap: 10px;
+  margin-bottom: 18px;
 }
 
-.loginPrompt svg {
-  color: #13715f;
+.loginIcon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #b7d7cc;
+  border-radius: 6px;
+  color: #0d6b59;
+  background: #eef8f4;
+}
+
+.loginPrompt {
+  color: #475467;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
 }
 
 .loginFields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .loginFields label {
   margin-bottom: 0;
+}
+
+.loginFields input {
+  height: 42px;
+  background: #fbfcfe;
+}
+
+.loginFields input:hover {
+  border-color: #98a2b3;
 }
 
 .loginFields label:has(small) {
@@ -575,6 +601,8 @@ button:disabled {
 }
 
 .loginFields small {
+  display: block;
+  margin-top: 1px;
   color: #667085;
   font-weight: 500;
   line-height: 1.4;

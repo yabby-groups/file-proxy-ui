@@ -4,6 +4,7 @@ import {
   Copy,
   ExternalLink,
   FolderOpen,
+  KeyRound,
   Languages,
   LogIn,
   LogOut,
@@ -754,25 +755,31 @@ function LoginCard({
         void onSubmit();
       }}
     >
-      <div className="loginPrompt">
-        <LogIn size={18} />
-        <span>{t("loginRequired")}</span>
+      <div className="loginIntro">
+        <div className="loginIcon" aria-hidden="true">
+          <LogIn size={20} />
+        </div>
+        <div className="loginPrompt">{t("loginRequired")}</div>
       </div>
       <div className="loginFields">
         <label>
           {t("username")}
           <input
+            autoComplete="username"
             value={name}
             onChange={(event) => setName(event.target.value)}
             autoFocus={!totpRequired}
+            required
           />
         </label>
         <label>
           {t("password")}
           <input
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            required
           />
         </label>
         {totpRequired && (
@@ -797,8 +804,8 @@ function LoginCard({
         )}
       </div>
       <button className="primary" type="submit" disabled={!!busy}>
-        <LogIn size={18} />
-        {t("login")}
+        {busy ? <KeyRound size={18} /> : <LogIn size={18} />}
+        {busy ? t("working") : t("login")}
       </button>
     </form>
   );
