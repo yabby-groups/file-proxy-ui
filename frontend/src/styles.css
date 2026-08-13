@@ -777,6 +777,12 @@ button:disabled {
   justify-content: space-between;
 }
 
+.logActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .pill {
   border: 1px solid #cbd5e1;
   border-radius: 999px;

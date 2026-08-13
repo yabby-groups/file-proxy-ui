@@ -8,6 +8,8 @@ TARGETS="${TARGETS:-darwin/arm64 windows/amd64 linux/amd64 linux/arm64}"
 RUN_TESTS="${RUN_TESTS:-1}"
 WAILS_FLAGS="${WAILS_FLAGS:-}"
 GO_ENV_PREFIX="${GO_ENV_PREFIX:-}"
+GO_TOOLCHAIN="${GO_TOOLCHAIN:-go1.25.0}"
+GO_BUILD_CACHE="${GO_BUILD_CACHE:-$ROOT/.cache/go-build/$GO_TOOLCHAIN}"
 SKIP_UNSUPPORTED="${SKIP_UNSUPPORTED:-0}"
 DOWNLOAD_WORKERS="${DOWNLOAD_WORKERS:-1}"
 WORKER_CACHE_REFRESH="${WORKER_CACHE_REFRESH:-1}"
@@ -337,22 +339,33 @@ copy_artifact() {
 }
 
 run_go() {
+  mkdir -p "$GO_BUILD_CACHE"
   if [[ -n "$GO_ENV_PREFIX" ]]; then
     # shellcheck disable=SC2086
-    env $GO_ENV_PREFIX go "$@"
+    env $GO_ENV_PREFIX GOTOOLCHAIN="$GO_TOOLCHAIN" GOCACHE="$GO_BUILD_CACHE" go "$@"
   else
-    go "$@"
+    GOTOOLCHAIN="$GO_TOOLCHAIN" GOCACHE="$GO_BUILD_CACHE" go "$@"
   fi
+}
+
+normalize_wails_bindings() {
+  local models="frontend/wailsjs/go/models.ts"
+
+  [[ -f "$models" ]] || return 0
+  sed -i.bak -E 's/[[:blank:]]+$//' "$models"
+  rm -f "$models.bak"
 }
 
 run_wails() {
   local target="$1"
+  mkdir -p "$GO_BUILD_CACHE"
+  normalize_wails_bindings
   if [[ -n "$GO_ENV_PREFIX" ]]; then
     # shellcheck disable=SC2086
-    env $GO_ENV_PREFIX wails build -platform "$target" -webview2 embed $WAILS_FLAGS
+    env $GO_ENV_PREFIX GOTOOLCHAIN="$GO_TOOLCHAIN" GOCACHE="$GO_BUILD_CACHE" wails build -platform "$target" -webview2 embed -skipbindings $WAILS_FLAGS
   else
     # shellcheck disable=SC2086
-    wails build -platform "$target" -webview2 embed $WAILS_FLAGS
+    GOTOOLCHAIN="$GO_TOOLCHAIN" GOCACHE="$GO_BUILD_CACHE" wails build -platform "$target" -webview2 embed -skipbindings $WAILS_FLAGS
   fi
 }
 
@@ -426,7 +439,7 @@ if [[ "$UPDATE_WORKERS_ONLY" == "1" ]]; then
 fi
 
 log "Generate logo assets"
-run_go run scripts/generate_logo_assets.go .
+run_go run -tags tools scripts/generate_logo_assets.go .
 
 log "Install frontend dependencies"
 npm install --prefix frontend

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -43,6 +44,89 @@ func TestLoginForwardsTOTPCode(t *testing.T) {
 	_, err := app.Login(" alice ", "secret", " 123456 ")
 	if err == nil || err.Error() != "totp invalid" {
 		t.Fatalf("Login error = %v, want totp invalid", err)
+	}
+}
+
+func TestCaptureOutputRecordsPromptWithoutTrailingNewline(t *testing.T) {
+	reader, writer := io.Pipe()
+	app := NewApp()
+	done := make(chan struct{})
+	go func() {
+		app.captureOutput("worker stdout", reader)
+		close(done)
+	}()
+
+	if _, err := io.WriteString(writer, "password: "); err != nil {
+		t.Fatalf("write prompt: %v", err)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if logs := app.Status().Logs; len(logs) == 1 {
+			if !strings.Contains(logs[0], "worker stdout: password: ") {
+				t.Fatalf("log = %q, want prompt", logs[0])
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatalf("close writer: %v", err)
+			}
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("captureOutput did not stop after EOF")
+			}
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	_ = writer.Close()
+	t.Fatal("prompt was not recorded before the pipe closed")
+}
+
+func TestAppendOutputLockedMergesFragmentsUntilNewline(t *testing.T) {
+	app := NewApp()
+	app.mu.Lock()
+	app.appendOutputLocked("stderr", "INFO file-proxy version")
+	app.appendOutputLocked("stderr", "=1.2.1.")
+	app.appendOutputLocked("stderr", "0\n")
+	app.appendOutputLocked("stderr", "ready\n")
+	app.appendOutputLocked("stdout", "prompt: ")
+	app.appendOutputLocked("stderr", "next\n")
+	app.appendOutputLocked("stdout", "ok\n")
+	logs := append([]string(nil), app.logs...)
+	app.mu.Unlock()
+
+	if len(logs) != 4 {
+		t.Fatalf("log count = %d, want 4: %#v", len(logs), logs)
+	}
+	for index, want := range []string{
+		"stderr: INFO file-proxy version=1.2.1.0",
+		"stderr: ready",
+		"stdout: prompt: ok",
+		"stderr: next",
+	} {
+		if !strings.Contains(logs[index], want) {
+			t.Errorf("logs[%d] = %q, want %q", index, logs[index], want)
+		}
+	}
+}
+
+func TestClearLogsRemovesHistoryAndPartialOutputIndexes(t *testing.T) {
+	app := NewApp()
+	app.mu.Lock()
+	app.appendOutputLocked("stdout", "waiting: ")
+	app.mu.Unlock()
+
+	status := app.ClearLogs()
+	if len(status.Logs) != 0 {
+		t.Fatalf("logs = %#v, want empty", status.Logs)
+	}
+
+	app.mu.Lock()
+	app.appendOutputLocked("stdout", "ready\n")
+	logs := append([]string(nil), app.logs...)
+	app.mu.Unlock()
+	if len(logs) != 1 || !strings.Contains(logs[0], "stdout: ready") {
+		t.Fatalf("logs after clear = %#v, want a new stdout line", logs)
 	}
 }
 

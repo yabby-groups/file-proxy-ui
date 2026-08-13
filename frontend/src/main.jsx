@@ -10,8 +10,10 @@ import {
   Play,
   Settings,
   Square,
+  Trash2,
 } from "lucide-react";
 import {
+  ClearLogs,
   Login,
   Logout,
   OpenStandaloneWebURL,
@@ -62,6 +64,8 @@ const translations = {
     stopped: "Stopped",
     logs: "Logs",
     noLogs: "No logs yet.",
+    clearLogs: "Clear logs",
+    clearLogsTask: "clear logs",
     working: "Working",
     openWebAddress: "Open local address",
     copyWebAddress: "Copy local address",
@@ -146,6 +150,8 @@ const translations = {
     stopped: "已停止",
     logs: "日志",
     noLogs: "暂无日志。",
+    clearLogs: "清空日志",
+    clearLogsTask: "清空日志",
     working: "处理中",
     openWebAddress: "打开本机地址",
     copyWebAddress: "复制本机地址",
@@ -250,6 +256,23 @@ function App() {
   useEffect(() => {
     void refresh().catch((err) => setError(String(err)));
   }, [refresh]);
+  useEffect(() => {
+    if (
+      !status.running &&
+      !status.web_running &&
+      !status.standalone_web_running
+    )
+      return undefined;
+    const timer = window.setInterval(() => {
+      void refresh().catch((err) => setError(String(err)));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [
+    refresh,
+    status.running,
+    status.web_running,
+    status.standalone_web_running,
+  ]);
   useEffect(() => {
     if (settingsOpen) return;
     const options = status.start_options || {};
@@ -647,14 +670,26 @@ function App() {
       <section className="logPanel">
         <div className="panelHeader">
           <h2>{t("logs")}</h2>
-          <ServiceState
-            running={
-              status.running ||
-              status.web_running ||
-              status.standalone_web_running
-            }
-            t={t}
-          />
+          <div className="logActions">
+            <ServiceState
+              running={
+                status.running ||
+                status.web_running ||
+                status.standalone_web_running
+              }
+              t={t}
+            />
+            <button
+              className="iconButton"
+              type="button"
+              disabled={!!busy || !(status.logs || []).length}
+              onClick={() => run(t("clearLogsTask"), ClearLogs)}
+              title={t("clearLogs")}
+              aria-label={t("clearLogs")}
+            >
+              <Trash2 size={18} />
+            </button>
+          </div>
         </div>
         <pre>{(status.logs || []).join("\n") || t("noLogs")}</pre>
       </section>

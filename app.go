@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -50,6 +49,7 @@ type App struct {
 	webCmd                 *exec.Cmd
 	standaloneWebCmd       *exec.Cmd
 	logs                   []string
+	partialLogIndexes      map[string]int
 	lastError              string
 }
 
@@ -141,6 +141,7 @@ func NewApp() *App {
 		apiBaseURL:             defaultAPIBaseURL,
 		startOptions:           defaultStartOptions(),
 		standaloneStartOptions: defaultStandaloneStartOptions(),
+		partialLogIndexes:      make(map[string]int),
 	}
 }
 
@@ -751,6 +752,15 @@ func (a *App) Status() AppStatus {
 	return a.statusLocked()
 }
 
+// ClearLogs removes the in-memory log history shown by the desktop app.
+func (a *App) ClearLogs() AppStatus {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.logs = nil
+	a.partialLogIndexes = make(map[string]int)
+	return a.statusLocked()
+}
+
 func (a *App) statusLocked() AppStatus {
 	logs := append([]string(nil), a.logs...)
 	return AppStatus{
@@ -1224,16 +1234,25 @@ func extractBundledBinary(name string) (string, error) {
 }
 
 func (a *App) captureOutput(label string, reader io.Reader) {
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		a.mu.Lock()
-		a.appendLogLocked(label + ": " + scanner.Text())
-		a.mu.Unlock()
-	}
-	if err := scanner.Err(); err != nil {
-		a.mu.Lock()
-		a.appendLogLocked(label + " read error: " + err.Error())
-		a.mu.Unlock()
+	buffer := make([]byte, 32*1024)
+	for {
+		count, err := reader.Read(buffer)
+		if count > 0 {
+			a.mu.Lock()
+			// A pipe read returns as soon as the worker writes, unlike a line scanner
+			// which holds prompts and progress output until a trailing newline arrives.
+			a.appendOutputLocked(label, string(buffer[:count]))
+			a.mu.Unlock()
+		}
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, io.EOF) {
+			a.mu.Lock()
+			a.appendLogLocked(label + " read error: " + err.Error())
+			a.mu.Unlock()
+		}
+		return
 	}
 }
 
@@ -1274,5 +1293,32 @@ func (a *App) appendLogLocked(line string) {
 	a.logs = append(a.logs, time.Now().Format("15:04:05")+" "+line)
 	if len(a.logs) > maxLogs {
 		a.logs = a.logs[len(a.logs)-maxLogs:]
+		for label, index := range a.partialLogIndexes {
+			if index == 0 {
+				delete(a.partialLogIndexes, label)
+			} else {
+				a.partialLogIndexes[label] = index - 1
+			}
+		}
+	}
+}
+
+// appendOutputLocked keeps arbitrary pipe reads within their original output lines.
+func (a *App) appendOutputLocked(label string, output string) {
+	for _, fragment := range strings.SplitAfter(output, "\n") {
+		if fragment == "" {
+			continue
+		}
+		complete := strings.HasSuffix(fragment, "\n")
+		line := strings.TrimSuffix(strings.TrimSuffix(fragment, "\n"), "\r")
+		if index, ok := a.partialLogIndexes[label]; ok {
+			a.logs[index] += line
+		} else {
+			a.appendLogLocked(label + ": " + line)
+			a.partialLogIndexes[label] = len(a.logs) - 1
+		}
+		if complete {
+			delete(a.partialLogIndexes, label)
+		}
 	}
 }
